@@ -6,8 +6,11 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
+	"github.com/warthog618/gpiod"
+	"github.com/warthog618/gpiod/device/rpi"
 )
 
 var joysticks = make(map[int]*sdl.Joystick)
@@ -47,6 +50,47 @@ func main() {
 	joystickLeft := JoystickStateNone
 	joystickRight := JoystickStateNone
 	var speed int16
+
+	in1, err := gpiod.RequestLine("gpiochip0", rpi.GPIO20, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	in2, err := gpiod.RequestLine("gpiochip0", rpi.GPIO21, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	in3, err := gpiod.RequestLine("gpiochip0", rpi.GPIO19, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	in4, err := gpiod.RequestLine("gpiochip0", rpi.GPIO26, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	ena, err := gpiod.RequestLine("gpiochip0", rpi.GPIO16, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	enb, err := gpiod.RequestLine("gpiochip0", rpi.GPIO13, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	pwm := 0
+	go func() {
+		counter, state := 0, 0
+		for {
+			counter++
+			if counter%100 > pwm {
+				state = 1
+			} else {
+				state = 0
+			}
+			ena.SetValue(state)
+			enb.SetValue(state)
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
 	for running {
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
@@ -93,14 +137,28 @@ func main() {
 				switch joystickRight {
 				case JoystickStateUp:
 					fmt.Println("right up")
+					in3.SetValue(1)
+					in4.SetValue(0)
 				case JoystickStateDown:
 					fmt.Println("right down")
+					in3.SetValue(0)
+					in4.SetValue(1)
+				default:
+					in3.SetValue(0)
+					in4.SetValue(0)
 				}
 				switch joystickLeft {
 				case JoystickStateUp:
 					fmt.Println("left up")
+					in1.SetValue(1)
+					in2.SetValue(0)
 				case JoystickStateDown:
 					fmt.Println("left down")
+					in1.SetValue(0)
+					in2.SetValue(1)
+				default:
+					in1.SetValue(0)
+					in2.SetValue(0)
 				}
 			case *sdl.JoyBallEvent:
 				fmt.Printf("[%d ms] Ball:%d\txrel:%d\tyrel:%d\n",
