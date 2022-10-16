@@ -1,3 +1,8 @@
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
+github.com/reef-pi/embd v0.0.0-20200823212911-23a8c07341dd/go.mod h1:vLR1mLVXpivVlbXyVJ4CdsUpOoyDWas+xjikOIzVV0g=
+github.com/reef-pi/hal v0.0.0-20210801213209-e1fdd03d558f/go.mod h1:ymcJ0AbYfWXT1vyAbXOjKtWaFdCv1HHYmXDMWxJSWSM=
+github.com/reef-pi/rpi v0.0.0-20220116071804-9ab406e54060 h1:CHoMp1LHrhQpc1j5yVw4UmnDEXbZ2CcWzKMrK8JT+OE=
+github.com/reef-pi/rpi v0.0.0-20220116071804-9ab406e54060/go.mod h1:5Zu8vYYKAJshaEh2WdVxsNXp1O6U6kTSvAMMAYmGjJQ=
 github.com/veandco/go-sdl2 v0.4.24 h1:J+OCnPp0yfas4DAG13e3kIgC84mNxWGa3gpWYxrQQfI=
 github.com/veandco/go-sdl2 v0.4.24/go.mod h1:OROqMhHD43nT4/i9crJukyVecjPNYYuCofep6SNiAjY=
 github.com/warthog618/gpiod v0.8.0 h1:qxH9XVvWHpTxzWFSndBcujFyNH5zVRzHM63tcmm85o4=

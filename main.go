@@ -75,10 +75,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	pwm := 0
+	pwm := 50
+	t := time.Tick(5 * time.Microsecond)
 	go func() {
 		counter, state := 0, 0
 		for {
+			<-t
 			counter++
 			if counter%100 > pwm {
 				state = 1
@@ -87,7 +89,6 @@ func main() {
 			}
 			ena.SetValue(state)
 			enb.SetValue(state)
-			time.Sleep(time.Millisecond)
 		}
 	}()
 
