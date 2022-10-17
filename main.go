@@ -132,7 +132,8 @@ func main() {
 					//fmt.Printf("2 axis [%d ms] Which: %v \t%x\n",
 					//	t.Timestamp, t.Which, value)
 					speed = axis[2]
-					fmt.Printf("speed %d\n", speed)
+					pwm = int(100 * (float64(speed) + 32768) / 65535)
+					fmt.Printf("speed %d pwm %d\n", speed, pwm)
 				}
 
 				switch joystickRight {
