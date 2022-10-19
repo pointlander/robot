@@ -75,6 +75,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	servoUpDown, err := gpiod.RequestLine("gpiochip0", rpi.GPIO9, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
+	servoLeftRight, err := gpiod.RequestLine("gpiochip0", rpi.GPIO11, gpiod.AsOutput(0))
+	if err != nil {
+		panic(err)
+	}
 	pwm := 50
 	t := time.Tick(5 * time.Microsecond)
 	go func() {
@@ -91,6 +99,9 @@ func main() {
 			enb.SetValue(state)
 		}
 	}()
+
+	pwmUpDownServo := 1500
+	pwmLeftRightServo := 1500
 
 	for running {
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -171,6 +182,51 @@ func main() {
 			case *sdl.JoyHatEvent:
 				fmt.Printf("[%d ms] Hat:%d\tvalue:%d\n",
 					t.Timestamp, t.Hat, t.Value)
+				if t.Value == 1 {
+					// up
+					if pwmUpDownServo < 2500 {
+						pwmUpDownServo += 100
+						servoUpDown.SetValue(1)
+						done := time.After(time.Duration(pwmUpDownServo) * time.Microsecond)
+						go func() {
+							<-done
+							servoUpDown.SetValue(0)
+						}()
+					}
+				} else if t.Value == 4 {
+					// down
+					if pwmUpDownServo > 100 {
+						pwmUpDownServo -= 100
+						servoUpDown.SetValue(1)
+						done := time.After(time.Duration(pwmUpDownServo) * time.Microsecond)
+						go func() {
+							<-done
+							servoUpDown.SetValue(0)
+						}()
+					}
+				} else if t.Value == 8 {
+					// left
+					if pwmLeftRightServo < 2500 {
+						pwmLeftRightServo += 100
+						servoLeftRight.SetValue(1)
+						done := time.After(time.Duration(pwmLeftRightServo) * time.Microsecond)
+						go func() {
+							<-done
+							servoLeftRight.SetValue(0)
+						}()
+					}
+				} else if t.Value == 2 {
+					// right
+					if pwmLeftRightServo > 100 {
+						pwmLeftRightServo -= 100
+						servoLeftRight.SetValue(1)
+						done := time.After(time.Duration(pwmLeftRightServo) * time.Microsecond)
+						go func() {
+							<-done
+							servoLeftRight.SetValue(0)
+						}()
+					}
+				}
 			case *sdl.JoyDeviceAddedEvent:
 				fmt.Println(t.Which)
 				joysticks[int(t.Which)] = sdl.JoystickOpen(int(t.Which))
