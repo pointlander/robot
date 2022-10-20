@@ -6,8 +6,12 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"sort"
 	"time"
 
+	"github.com/blackjack/webcam"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/warthog618/gpiod"
 	"github.com/warthog618/gpiod/device/rpi"
@@ -37,6 +41,24 @@ func (j JoystickState) String() string {
 	default:
 		return "none"
 	}
+}
+
+type FrameSizes []webcam.FrameSize
+
+func (slice FrameSizes) Len() int {
+	return len(slice)
+}
+
+//For sorting purposes
+func (slice FrameSizes) Less(i, j int) bool {
+	ls := slice[i].MaxWidth * slice[i].MaxHeight
+	rs := slice[j].MaxWidth * slice[j].MaxHeight
+	return ls < rs
+}
+
+//For sorting purposes
+func (slice FrameSizes) Swap(i, j int) {
+	slice[i], slice[j] = slice[j], slice[i]
 }
 
 func main() {
@@ -102,6 +124,69 @@ func main() {
 
 	pwmUpDownServo := 1500
 	pwmLeftRightServo := 1500
+
+	go func() {
+		runtime.LockOSThread()
+		camera, err := webcam.Open("/dev/video0")
+		if err != nil {
+			panic(err)
+		}
+		defer camera.Close()
+
+		format_desc := camera.GetSupportedFormats()
+		var formats []webcam.PixelFormat
+		for f := range format_desc {
+			formats = append(formats, f)
+		}
+		sort.Slice(formats, func(i, j int) bool {
+			return format_desc[formats[i]] < format_desc[formats[j]]
+		})
+		println("Available formats: ")
+		for i, value := range formats {
+			fmt.Printf("[%d] %s\n", i+1, format_desc[value])
+		}
+		format := formats[1]
+
+		fmt.Printf("Supported frame sizes for format %s\n", format_desc[format])
+		frames := FrameSizes(camera.GetSupportedFrameSizes(format))
+		sort.Sort(frames)
+		for i, value := range frames {
+			fmt.Printf("[%d] %s\n", i+1, value.GetString())
+		}
+		size := frames[5]
+
+		f, w, h, err := camera.SetImageFormat(format, uint32(size.MaxWidth), uint32(size.MaxHeight))
+		if err != nil {
+			panic(err)
+		} else {
+			fmt.Printf("Resulting image format: %s (%dx%d)\n", format_desc[f], w, h)
+		}
+
+		err = camera.StartStreaming()
+		if err != nil {
+			panic(err)
+		}
+
+		for running {
+			err = camera.WaitForFrame(5)
+
+			switch err.(type) {
+			case nil:
+			case *webcam.Timeout:
+				fmt.Fprint(os.Stderr, err.Error())
+				continue
+			default:
+				panic(err.Error())
+			}
+
+			frame, err := camera.ReadFrame()
+			if len(frame) != 0 {
+				fmt.Printf("Frame: %d bytes\n", len(frame))
+			} else if err != nil {
+				panic(err)
+			}
+		}
+	}()
 
 	for running {
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
