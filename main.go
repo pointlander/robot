@@ -9,10 +9,14 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math/rand"
 	"os"
 	"runtime"
 	"sort"
 	"time"
+
+	"github.com/pointlander/gradient/tf32"
+	"github.com/pointlander/occam"
 
 	"github.com/blackjack/webcam"
 	"github.com/nfnt/resize"
@@ -171,6 +175,14 @@ func main() {
 			panic(err)
 		}
 
+		l, r := occam.NewNetwork(32, 128), occam.NewNetwork(32, 128)
+		for i := 0; i < 128; i++ {
+			for j := 0; j < 32; j++ {
+				l.Point.X[32*i+j] = rand.Float32()
+				r.Point.X[32*i+j] = rand.Float32()
+			}
+		}
+
 		var cp []byte
 		first := false
 		for running {
@@ -203,7 +215,7 @@ func main() {
 				}
 				tiny := resize.Resize(8, 0, yuyv, resize.Lanczos3)
 				b := tiny.Bounds()
-				gray := image.NewRGBA(b)
+				gray := image.NewGray(b)
 				for y := 0; y < b.Max.Y; y++ {
 					for x := 0; x < b.Max.X; x++ {
 						original := tiny.At(x, y)
@@ -219,6 +231,38 @@ func main() {
 					}
 					defer output.Close()
 					png.Encode(output, gray)
+				}
+				width, height := b.Max.X, b.Max.Y
+				size := (width / 2) * height
+				left, right := make([]float64, 0, size), make([]float64, 0, size)
+				for i := 0; i < height; i++ {
+					for j := 0; j < width; j++ {
+						if j >= width/2 {
+							right = append(right, float64(gray.At(i, j).(color.Gray).Y)/255)
+						} else {
+							left = append(left, float64(gray.At(i, j).(color.Gray).Y)/255)
+						}
+					}
+				}
+
+				for i, value := range left {
+					l.Input.X[i] = float32(value)
+				}
+				l.Cost(func(a *tf32.V) bool {
+					fmt.Println("left", a.X[0])
+					return true
+				})
+				for i, value := range right {
+					l.Input.X[i] = float32(value)
+				}
+				r.Cost(func(a *tf32.V) bool {
+					fmt.Println("right", a.X[0])
+					return true
+				})
+
+				for i := 0; i < 16; i++ {
+					l.Iterate(left)
+					r.Iterate(right)
 				}
 			} else if err != nil {
 				panic(err)
