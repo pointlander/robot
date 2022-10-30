@@ -6,12 +6,16 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"runtime"
 	"sort"
 	"time"
 
 	"github.com/blackjack/webcam"
+	"github.com/nfnt/resize"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/warthog618/gpiod"
 	"github.com/warthog618/gpiod/device/rpi"
@@ -167,6 +171,8 @@ func main() {
 			panic(err)
 		}
 
+		var cp []byte
+		first := false
 		for running {
 			err = camera.WaitForFrame(5)
 
@@ -181,7 +187,39 @@ func main() {
 
 			frame, err := camera.ReadFrame()
 			if len(frame) != 0 {
-				fmt.Printf("Frame: %d bytes\n", len(frame))
+				if len(cp) < len(frame) {
+					cp = make([]byte, len(frame))
+				}
+				copy(cp, frame)
+				fmt.Printf("Frame: %d bytes\n", len(cp))
+				yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
+				for i := range yuyv.Cb {
+					ii := i * 4
+					yuyv.Y[i*2] = cp[ii]
+					yuyv.Y[i*2+1] = cp[ii+2]
+					yuyv.Cb[i] = cp[ii+1]
+					yuyv.Cr[i] = cp[ii+3]
+
+				}
+				tiny := resize.Resize(8, 0, yuyv, resize.Lanczos3)
+				b := tiny.Bounds()
+				gray := image.NewRGBA(b)
+				for y := 0; y < b.Max.Y; y++ {
+					for x := 0; x < b.Max.X; x++ {
+						original := tiny.At(x, y)
+						pixel := color.GrayModel.Convert(original)
+						gray.Set(x, y, pixel)
+					}
+				}
+				if !first {
+					first = true
+					output, err := os.Create("test.png")
+					if err != nil {
+						panic(err)
+					}
+					defer output.Close()
+					png.Encode(output, gray)
+				}
 			} else if err != nil {
 				panic(err)
 			}
