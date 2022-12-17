@@ -183,6 +183,8 @@ func main() {
 			}
 		}
 
+		net := occam.NewNetwork(64, 9)
+
 		var cp []byte
 		first := false
 		for running {
@@ -213,7 +215,7 @@ func main() {
 					yuyv.Cr[i] = cp[ii+3]
 
 				}
-				tiny := resize.Resize(8, 0, yuyv, resize.Lanczos3)
+				tiny := resize.Resize(24, 24, yuyv, resize.Lanczos3)
 				b := tiny.Bounds()
 				gray := image.NewGray(b)
 				for y := 0; y < b.Max.Y; y++ {
@@ -232,8 +234,52 @@ func main() {
 					defer output.Close()
 					png.Encode(output, gray)
 				}
-				width, height := b.Max.X, b.Max.Y
-				size := (width / 2) * height
+				width, height, index := b.Max.X, b.Max.Y, 0
+				for i := 0; i < width; i += 8 {
+					for j := 0; j < height; j += 8 {
+						for x := 0; x < 8; x++ {
+							for y := 0; y < 8; y++ {
+								net.Point.X[index] = float32(gray.At(i+x, j+y).(color.Gray).Y) / 255
+								index++
+							}
+						}
+					}
+				}
+				max, index := float32(0.0), 0
+				for i := 0; i < 9; i++ {
+					for i, value := range net.Point.X[i*32 : (i+1)*32] {
+						net.Input.X[i] = float32(value)
+					}
+					net.Cost(func(a *tf32.V) bool {
+						if a.X[0] > max {
+							max = a.X[0]
+							index = i
+						}
+						return true
+					})
+				}
+				switch index {
+				case 0:
+					fmt.Println("Left")
+				case 1:
+					fmt.Println("Forward")
+				case 2:
+					fmt.Println("Right")
+				case 3:
+					fmt.Println("Left Forward")
+				case 4:
+					fmt.Println("Forward")
+				case 5:
+					fmt.Println("Right Forward")
+				case 6:
+					fmt.Println("Left Backward")
+				case 7:
+					fmt.Println("Backward")
+				case 8:
+					fmt.Println("Right Backward")
+				}
+
+				/*size := (width / 2) * height
 				left, right := make([]float64, 0, size), make([]float64, 0, size)
 				for i := 0; i < height; i++ {
 					for j := 0; j < width; j++ {
@@ -248,22 +294,23 @@ func main() {
 				for i, value := range left {
 					l.Input.X[i] = float32(value)
 				}
+				costa, costb := float32(0.0), float32(0.0)
 				l.Cost(func(a *tf32.V) bool {
-					fmt.Println("left", a.X[0])
+					costa = a.X[0]
 					return true
 				})
 				for i, value := range right {
-					l.Input.X[i] = float32(value)
+					r.Input.X[i] = float32(value)
 				}
 				r.Cost(func(a *tf32.V) bool {
-					fmt.Println("right", a.X[0])
+					costb = a.X[0]
 					return true
 				})
-
+				fmt.Println(costa, costb)
 				for i := 0; i < 16; i++ {
 					l.Iterate(left)
 					r.Iterate(right)
-				}
+				}*/
 			} else if err != nil {
 				panic(err)
 			}
