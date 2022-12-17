@@ -261,22 +261,40 @@ func main() {
 				switch index {
 				case 0:
 					fmt.Println("Left")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateDown
 				case 1:
 					fmt.Println("Forward")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateUp
 				case 2:
 					fmt.Println("Right")
+					joystickLeft = JoystickStateDown
+					joystickRight = JoystickStateUp
 				case 3:
 					fmt.Println("Left Forward")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateUp
 				case 4:
 					fmt.Println("Forward")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateUp
 				case 5:
 					fmt.Println("Right Forward")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateUp
 				case 6:
 					fmt.Println("Left Backward")
+					joystickLeft = JoystickStateDown
+					joystickRight = JoystickStateNone
 				case 7:
 					fmt.Println("Backward")
+					joystickLeft = JoystickStateDown
+					joystickRight = JoystickStateDown
 				case 8:
 					fmt.Println("Right Backward")
+					joystickLeft = JoystickStateNone
+					joystickRight = JoystickStateDown
 				}
 
 				/*size := (width / 2) * height
