@@ -9,11 +9,13 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math/cmplx"
 	"os"
 	"runtime"
 	"sort"
 	"time"
 
+	"github.com/mjibson/go-dsp/fft"
 	"github.com/pointlander/gradient/tf32"
 	"github.com/pointlander/occam"
 
@@ -267,11 +269,21 @@ func main() {
 					png.Encode(output, gray)
 				}
 				width, height, index := b.Max.X, b.Max.Y, 0
+				pixels := make([][]float64, height)
+				for i := range pixels {
+					pixels[i] = make([]float64, width)
+				}
 				for i := 0; i < width; i += 8 {
 					for j := 0; j < height; j += 8 {
 						for x := 0; x < 8; x++ {
 							for y := 0; y < 8; y++ {
-								net.Point.X[index] = float32(gray.At(i+x, j+y).(color.Gray).Y) / 255
+								pixels[y][x] = float64(gray.At(i+x, j+y).(color.Gray).Y) / 255
+							}
+						}
+						output := fft.FFT2Real(pixels)
+						for x := 0; x < 8; x++ {
+							for y := 0; y < 8; y++ {
+								net.Point.X[index] = float32(cmplx.Abs(output[y][x]) / float64(width*height))
 								index++
 							}
 						}
