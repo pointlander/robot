@@ -27,8 +27,12 @@ import (
 
 var joysticks = make(map[int]*sdl.Joystick)
 
-// JoystickState is the state of a joystick
-type JoystickState uint
+type (
+	// JoystickState is the state of a joystick
+	JoystickState uint
+	// Mode is the operating mode of the robot
+	Mode uint
+)
 
 const (
 	// JoystickStateNone is the default state of a joystick
@@ -37,6 +41,13 @@ const (
 	JoystickStateUp
 	// JoystickStateDown is the state of a joystick when it is pushed down
 	JoystickStateDown
+)
+
+const (
+	// ModeManual
+	ModeManual Mode = iota
+	// ModeAuto
+	ModeAuto
 )
 
 // String returns a string representation of the JoystickState
@@ -80,6 +91,7 @@ func main() {
 	joystickLeft := JoystickStateNone
 	joystickRight := JoystickStateNone
 	var speed int16
+	var mode Mode
 
 	in1, err := gpiod.RequestLine("gpiochip0", rpi.GPIO20, gpiod.AsOutput(0))
 	if err != nil {
@@ -129,6 +141,35 @@ func main() {
 			enb.SetValue(state)
 		}
 	}()
+
+	update := func() {
+		switch joystickRight {
+		case JoystickStateUp:
+			fmt.Println("right up")
+			in3.SetValue(1)
+			in4.SetValue(0)
+		case JoystickStateDown:
+			fmt.Println("right down")
+			in3.SetValue(0)
+			in4.SetValue(1)
+		default:
+			in3.SetValue(0)
+			in4.SetValue(0)
+		}
+		switch joystickLeft {
+		case JoystickStateUp:
+			fmt.Println("left up")
+			in1.SetValue(1)
+			in2.SetValue(0)
+		case JoystickStateDown:
+			fmt.Println("left down")
+			in1.SetValue(0)
+			in2.SetValue(1)
+		default:
+			in1.SetValue(0)
+			in2.SetValue(0)
+		}
+	}
 
 	pwmUpDownServo := 1500
 	pwmLeftRightServo := 1500
@@ -258,43 +299,46 @@ func main() {
 						return true
 					})
 				}
-				switch index {
-				case 0:
-					fmt.Println("Left")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateDown
-				case 1:
-					fmt.Println("Forward")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateUp
-				case 2:
-					fmt.Println("Right")
-					joystickLeft = JoystickStateDown
-					joystickRight = JoystickStateUp
-				case 3:
-					fmt.Println("Left Forward")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateUp
-				case 4:
-					fmt.Println("Forward")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateUp
-				case 5:
-					fmt.Println("Right Forward")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateUp
-				case 6:
-					fmt.Println("Left Backward")
-					joystickLeft = JoystickStateDown
-					joystickRight = JoystickStateNone
-				case 7:
-					fmt.Println("Backward")
-					joystickLeft = JoystickStateDown
-					joystickRight = JoystickStateDown
-				case 8:
-					fmt.Println("Right Backward")
-					joystickLeft = JoystickStateNone
-					joystickRight = JoystickStateDown
+				if mode == ModeAuto {
+					switch index {
+					case 0:
+						fmt.Println("Left")
+						joystickLeft = JoystickStateUp
+						joystickRight = JoystickStateDown
+					case 1:
+						fmt.Println("Forward")
+						joystickLeft = JoystickStateUp
+						joystickRight = JoystickStateUp
+					case 2:
+						fmt.Println("Right")
+						joystickLeft = JoystickStateDown
+						joystickRight = JoystickStateUp
+					case 3:
+						fmt.Println("Left Forward")
+						joystickLeft = JoystickStateUp
+						joystickRight = JoystickStateUp
+					case 4:
+						fmt.Println("Forward")
+						joystickLeft = JoystickStateUp
+						joystickRight = JoystickStateUp
+					case 5:
+						fmt.Println("Right Forward")
+						joystickLeft = JoystickStateUp
+						joystickRight = JoystickStateUp
+					case 6:
+						fmt.Println("Left Backward")
+						joystickLeft = JoystickStateDown
+						joystickRight = JoystickStateNone
+					case 7:
+						fmt.Println("Backward")
+						joystickLeft = JoystickStateDown
+						joystickRight = JoystickStateDown
+					case 8:
+						fmt.Println("Right Backward")
+						joystickLeft = JoystickStateNone
+						joystickRight = JoystickStateDown
+					}
+					update()
 				}
 
 				/*size := (width / 2) * height
@@ -344,30 +388,34 @@ func main() {
 				value := int16(t.Value)
 				axis[t.Axis] = value
 				if t.Axis == 3 || t.Axis == 4 {
-					if axis[3] < 20000 && axis[3] > -20000 {
-						if axis[4] < -32000 {
-							joystickRight = JoystickStateUp
-						} else if axis[4] > 32000 {
-							joystickRight = JoystickStateDown
+					if mode == ModeManual {
+						if axis[3] < 20000 && axis[3] > -20000 {
+							if axis[4] < -32000 {
+								joystickRight = JoystickStateUp
+							} else if axis[4] > 32000 {
+								joystickRight = JoystickStateDown
+							} else {
+								joystickRight = JoystickStateNone
+							}
 						} else {
 							joystickRight = JoystickStateNone
 						}
-					} else {
-						joystickRight = JoystickStateNone
 					}
 					//fmt.Printf("right [%d ms] Which: %v \t%d %d\n",
 					//		t.Timestamp, t.Which, axis[3], axis[4])
 				} else if t.Axis == 0 || t.Axis == 1 {
-					if axis[0] < 20000 && axis[0] > -20000 {
-						if axis[1] < -32000 {
-							joystickLeft = JoystickStateUp
-						} else if axis[1] > 32000 {
-							joystickLeft = JoystickStateDown
+					if mode == ModeManual {
+						if axis[0] < 20000 && axis[0] > -20000 {
+							if axis[1] < -32000 {
+								joystickLeft = JoystickStateUp
+							} else if axis[1] > 32000 {
+								joystickLeft = JoystickStateDown
+							} else {
+								joystickLeft = JoystickStateNone
+							}
 						} else {
 							joystickLeft = JoystickStateNone
 						}
-					} else {
-						joystickLeft = JoystickStateNone
 					}
 					//fmt.Printf("left [%d ms] Which: %v \t%d %d\n",
 					//t.Timestamp, t.Which, axis[0], axis[1])
@@ -379,38 +427,21 @@ func main() {
 					fmt.Printf("speed %d pwm %d\n", speed, pwm)
 				}
 
-				switch joystickRight {
-				case JoystickStateUp:
-					fmt.Println("right up")
-					in3.SetValue(1)
-					in4.SetValue(0)
-				case JoystickStateDown:
-					fmt.Println("right down")
-					in3.SetValue(0)
-					in4.SetValue(1)
-				default:
-					in3.SetValue(0)
-					in4.SetValue(0)
-				}
-				switch joystickLeft {
-				case JoystickStateUp:
-					fmt.Println("left up")
-					in1.SetValue(1)
-					in2.SetValue(0)
-				case JoystickStateDown:
-					fmt.Println("left down")
-					in1.SetValue(0)
-					in2.SetValue(1)
-				default:
-					in1.SetValue(0)
-					in2.SetValue(0)
-				}
+				update()
 			case *sdl.JoyBallEvent:
 				fmt.Printf("[%d ms] Ball:%d\txrel:%d\tyrel:%d\n",
 					t.Timestamp, t.Ball, t.XRel, t.YRel)
 			case *sdl.JoyButtonEvent:
 				fmt.Printf("[%d ms] Button:%d\tstate:%d\n",
 					t.Timestamp, t.Button, t.State)
+				if t.Button == 0 && t.State == 1 {
+					switch mode {
+					case ModeManual:
+						mode = ModeAuto
+					case ModeAuto:
+						mode = ModeManual
+					}
+				}
 			case *sdl.JoyHatEvent:
 				fmt.Printf("[%d ms] Hat:%d\tvalue:%d\n",
 					t.Timestamp, t.Hat, t.Value)
