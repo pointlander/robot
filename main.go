@@ -203,7 +203,7 @@ func main() {
 		for i, value := range frames {
 			fmt.Printf("[%d] %s\n", i+1, value.GetString())
 		}
-		size := frames[5]
+		size := frames[0]
 
 		f, w, h, err := camera.SetImageFormat(format, uint32(size.MaxWidth), uint32(size.MaxHeight))
 		if err != nil {
