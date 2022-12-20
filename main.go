@@ -410,7 +410,12 @@ func main() {
 						mode = ModeAuto
 					case ModeAuto:
 						mode = ModeManual
+						joystickLeft = JoystickStateNone
+						joystickRight = JoystickStateNone
+						update()
 					}
+				} else if t.Button == 1 && t.State == 1 {
+					pwm = (pwm + 25) % 100
 				}
 			case *sdl.JoyHatEvent:
 				fmt.Printf("[%d ms] Hat:%d\tvalue:%d\n",
