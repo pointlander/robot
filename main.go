@@ -5,6 +5,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -51,6 +52,11 @@ const (
 	ModeAuto
 )
 
+var (
+	// FlagPicture is the flag for taking a picture
+	FlagPicture = flag.Bool("picture", false, "take a picture")
+)
+
 // String returns a string representation of the JoystickState
 func (j JoystickState) String() string {
 	switch j {
@@ -81,7 +87,106 @@ func (slice FrameSizes) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], slice[i]
 }
 
+func picture() {
+	camera, err := webcam.Open("/dev/video0")
+	if err != nil {
+		panic(err)
+	}
+	defer camera.Close()
+
+	format_desc := camera.GetSupportedFormats()
+	var formats []webcam.PixelFormat
+	for f := range format_desc {
+		formats = append(formats, f)
+	}
+	sort.Slice(formats, func(i, j int) bool {
+		return format_desc[formats[i]] < format_desc[formats[j]]
+	})
+	println("Available formats: ")
+	for i, value := range formats {
+		fmt.Printf("[%d] %s\n", i+1, format_desc[value])
+	}
+	format := formats[1]
+
+	fmt.Printf("Supported frame sizes for format %s\n", format_desc[format])
+	frames := FrameSizes(camera.GetSupportedFrameSizes(format))
+	sort.Sort(frames)
+	for i, value := range frames {
+		fmt.Printf("[%d] %s\n", i+1, value.GetString())
+	}
+	size := frames[0]
+
+	f, w, h, err := camera.SetImageFormat(format, uint32(size.MaxWidth), uint32(size.MaxHeight))
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Printf("Resulting image format: %s (%dx%d)\n", format_desc[f], w, h)
+	}
+
+	err = camera.StartStreaming()
+	if err != nil {
+		panic(err)
+	}
+	defer camera.StopStreaming()
+
+	var cp []byte
+	err = camera.WaitForFrame(5)
+
+	switch err.(type) {
+	case nil:
+	case *webcam.Timeout:
+		fmt.Fprint(os.Stderr, err.Error())
+	default:
+		panic(err.Error())
+	}
+
+	frame, err := camera.ReadFrame()
+	if err != nil {
+		panic(err)
+	}
+	if len(frame) != 0 {
+		if len(cp) < len(frame) {
+			cp = make([]byte, len(frame))
+		}
+		copy(cp, frame)
+		fmt.Printf("Frame: %d bytes\n", len(cp))
+		yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
+		for i := range yuyv.Cb {
+			ii := i * 4
+			yuyv.Y[i*2] = cp[ii]
+			yuyv.Y[i*2+1] = cp[ii+2]
+			yuyv.Cb[i] = cp[ii+1]
+			yuyv.Cr[i] = cp[ii+3]
+
+		}
+		tiny := resize.Resize(24, 24, yuyv, resize.Lanczos3)
+		b := tiny.Bounds()
+		gray := image.NewGray(b)
+		for y := 0; y < b.Max.Y; y++ {
+			for x := 0; x < b.Max.X; x++ {
+				original := tiny.At(x, y)
+				pixel := color.GrayModel.Convert(original)
+				gray.Set(x, y, pixel)
+			}
+		}
+
+		output, err := os.Create("test.png")
+		if err != nil {
+			panic(err)
+		}
+		defer output.Close()
+		png.Encode(output, gray)
+	}
+}
+
 func main() {
+	flag.Parse()
+
+	if *FlagPicture {
+		picture()
+		return
+	}
+
 	var event sdl.Event
 	var running bool
 	sdl.Init(sdl.INIT_JOYSTICK)
@@ -220,7 +325,6 @@ func main() {
 		net := occam.NewNetwork(64, 9)
 
 		var cp []byte
-		first := false
 		for running {
 			err = camera.WaitForFrame(5)
 
@@ -258,15 +362,6 @@ func main() {
 						pixel := color.GrayModel.Convert(original)
 						gray.Set(x, y, pixel)
 					}
-				}
-				if !first {
-					first = true
-					output, err := os.Create("test.png")
-					if err != nil {
-						panic(err)
-					}
-					defer output.Close()
-					png.Encode(output, gray)
 				}
 				width, height, index := b.Max.X, b.Max.Y, 0
 				pixels := make([][]float64, height)
