@@ -10,8 +10,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"math/cmplx"
 	"os"
+	"os/exec"
 	"runtime"
 	"sort"
 	"time"
@@ -88,76 +90,62 @@ func (slice FrameSizes) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], slice[i]
 }
 
-func media() {
+// StreamCamera is a camera that is from a stream
+type StreamCamera struct {
+	Stream bool
+	Images chan [][]float64
+}
+
+// NewStreamCamera creates a new streaming camera
+func NewStreamCamera() *StreamCamera {
+	return &StreamCamera{
+		Stream: true,
+		Images: make(chan [][]float64, 8),
+	}
+}
+
+// Start starts streaming
+func (sc *StreamCamera) Start() {
+	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
+	input, err := command.StdoutPipe()
+	if err != nil {
+		panic(err)
+	}
+	err = command.Start()
+	if err != nil {
+		panic(err)
+	}
+	output, err := os.OpenFile("center", os.O_RDWR, 0600)
+	if err != nil {
+		panic(err)
+	}
+	go io.Copy(output, input)
+	defer close(sc.Images)
+
 	media, err := reisen.NewMedia("center")
 	if err != nil {
 		panic(err)
 	}
 	defer media.Close()
-	//dur, err := media.Duration()
-	//if err != nil {
-	//		panic(err)
-	//}
-	// Print the media properties.
-	//fmt.Println("Duration:", dur)
-	fmt.Println("Format name:", media.FormatName())
-	fmt.Println("Format long name:", media.FormatLongName())
-	fmt.Println("MIME type:", media.FormatMIMEType())
-	fmt.Println("Number of streams:", media.StreamCount())
-	fmt.Println()
-
-	// Enumerate the media file streams.
-	for _, stream := range media.Streams() {
-		dur, err := stream.Duration()
-		if err != nil {
-			panic(err)
-		}
-		tbNum, tbDen := stream.TimeBase()
-		fpsNum, fpsDen := stream.FrameRate()
-
-		// Print the properties common
-		// for both stream types.
-		fmt.Println("Index:", stream.Index())
-		fmt.Println("Stream type:", stream.Type())
-		fmt.Println("Codec name:", stream.CodecName())
-		fmt.Println("Codec long name:", stream.CodecLongName())
-		fmt.Println("Stream duration:", dur)
-		fmt.Println("Stream bit rate:", stream.BitRate())
-		fmt.Printf("Time base: %d/%d\n", tbNum, tbDen)
-		fmt.Printf("Frame rate: %d/%d\n", fpsNum, fpsDen)
-		fmt.Println("Frame count:", stream.FrameCount())
-		fmt.Println()
-	}
-
-	// Do decoding.
 	err = media.OpenDecode()
 	if err != nil {
 		panic(err)
 	}
-	gotPacket := true
 
-	for i := 0; i < 9 && gotPacket; i++ {
-		// Read packets one by one. A packet
-		// can contain either a video frame
-		// or an audio frame.
+	for sc.Stream {
 		var pkt *reisen.Packet
-		pkt, gotPacket, err = media.ReadPacket()
+		pkt, gotPacket, err := media.ReadPacket()
 		if err != nil {
 			panic(err)
 		}
 
-		// Check if the media file
-		// is depleted.
 		if !gotPacket {
 			break
 		}
 
-		// Determine what stream
-		// the packet belongs to.
 		switch pkt.Type() {
 		case reisen.StreamVideo:
 			s := media.Streams()[pkt.StreamIndex()].(*reisen.VideoStream)
-
 			if !s.Opened() {
 				err = s.Open()
 				if err != nil {
@@ -170,37 +158,49 @@ func media() {
 				panic(err)
 			}
 
-			// If the media file is
-			// depleted.
 			if !gotFrame {
 				break
 			}
 
-			// If the packet doesn't
-			// contain a whole frame,
-			// just skip it.
 			if videoFrame == nil {
 				continue
 			}
 
-			//pts, err := videoFrame.PresentationOffset()
-			//if err != nil {
-			//	panic(err)
-			//}
-
-			//fmt.Println("Presentation duration offset:", pts)
-			fmt.Println("Number of pixels:", len(videoFrame.Image().Pix))
-			fmt.Println("Coded picture number:", videoFrame.IndexCoded())
-			fmt.Println("Display picture number:", videoFrame.IndexDisplay())
-			fmt.Println()
-
-			output, err := os.Create("test.png")
-			if err != nil {
-				panic(err)
+			tiny := resize.Resize(24, 24, videoFrame.Image(), resize.Lanczos3)
+			b := tiny.Bounds()
+			gray := image.NewGray(b)
+			for y := 0; y < b.Max.Y; y++ {
+				for x := 0; x < b.Max.X; x++ {
+					original := tiny.At(x, y)
+					pixel := color.GrayModel.Convert(original)
+					gray.Set(x, y, pixel)
+				}
 			}
-			defer output.Close()
-			png.Encode(output, videoFrame.Image())
-			gotPacket = false
+			width, height := b.Max.X, b.Max.Y
+			pixels := make([][]float64, height)
+			for i := range pixels {
+				pixels[i] = make([]float64, width)
+			}
+			for i := 0; i < width; i += 8 {
+				for j := 0; j < height; j += 8 {
+					for x := 0; x < 8; x++ {
+						for y := 0; y < 8; y++ {
+							pixels[y][x] = float64(gray.At(i+x, j+y).(color.Gray).Y) / 255
+						}
+					}
+					output := fft.FFT2Real(pixels)
+					for x := 0; x < 8; x++ {
+						for y := 0; y < 8; y++ {
+							pixels[y][x] = cmplx.Abs(output[y][x]) / float64(width*height)
+						}
+					}
+				}
+			}
+			select {
+			case sc.Images <- pixels:
+			default:
+				fmt.Println("drop")
+			}
 		case reisen.StreamAudio:
 			s := media.Streams()[pkt.StreamIndex()].(*reisen.AudioStream)
 
@@ -223,17 +223,6 @@ func media() {
 			if audioFrame == nil {
 				continue
 			}
-
-			pts, err := audioFrame.PresentationOffset()
-			if err != nil {
-				panic(err)
-			}
-
-			fmt.Println("Presentation duration offset:", pts)
-			fmt.Println("Data length:", len(audioFrame.Data()))
-			fmt.Println("Coded picture number:", audioFrame.IndexCoded())
-			fmt.Println("Display picture number:", audioFrame.IndexDisplay())
-			fmt.Println()
 		}
 	}
 
@@ -245,6 +234,11 @@ func media() {
 	}
 
 	err = media.CloseDecode()
+	if err != nil {
+		panic(err)
+	}
+
+	err = command.Wait()
 	if err != nil {
 		panic(err)
 	}
@@ -347,7 +341,14 @@ func main() {
 
 	if *FlagPicture {
 		//picture()
-		media()
+		stream := NewStreamCamera()
+		go stream.Start()
+		for i := 0; i < 8; i++ {
+			image := <-stream.Images
+			_ = image
+			fmt.Println("center", i)
+		}
+		stream.Stream = false
 		return
 	}
 
