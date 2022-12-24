@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
+	"image/color/palette"
+	"image/draw"
+	"image/gif"
 	"io"
 	"math/cmplx"
 	"os"
@@ -90,17 +92,23 @@ func (slice FrameSizes) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], slice[i]
 }
 
+// Frame is a video frame
+type Frame struct {
+	Frame image.Image
+	DCT   [][]float64
+}
+
 // StreamCamera is a camera that is from a stream
 type StreamCamera struct {
 	Stream bool
-	Images chan [][]float64
+	Images chan Frame
 }
 
 // NewStreamCamera creates a new streaming camera
 func NewStreamCamera() *StreamCamera {
 	return &StreamCamera{
 		Stream: true,
-		Images: make(chan [][]float64, 8),
+		Images: make(chan Frame, 8),
 	}
 }
 
@@ -197,7 +205,10 @@ func (sc *StreamCamera) Start() {
 				}
 			}
 			select {
-			case sc.Images <- pixels:
+			case sc.Images <- Frame{
+				Frame: videoFrame.Image(),
+				DCT:   pixels,
+			}:
 			default:
 				fmt.Println("drop")
 			}
@@ -244,8 +255,25 @@ func (sc *StreamCamera) Start() {
 	}
 }
 
-func picture() {
-	camera, err := webcam.Open("/dev/video0")
+// V4LCamera is a camera that is from a v4l device
+type V4LCamera struct {
+	Stream bool
+	Images chan Frame
+}
+
+// NewV4LCamera creates a new v4l camera
+func NewV4LCamera() *V4LCamera {
+	return &V4LCamera{
+		Stream: true,
+		Images: make(chan Frame, 8),
+	}
+}
+
+// Start starts streaming
+func (vc *V4LCamera) Start(device string) {
+	runtime.LockOSThread()
+	fmt.Println(device)
+	camera, err := webcam.Open(device)
 	if err != nil {
 		panic(err)
 	}
@@ -297,42 +325,65 @@ func picture() {
 		panic(err.Error())
 	}
 
-	frame, err := camera.ReadFrame()
-	if err != nil {
-		panic(err)
-	}
-	if len(frame) != 0 {
-		if len(cp) < len(frame) {
-			cp = make([]byte, len(frame))
-		}
-		copy(cp, frame)
-		fmt.Printf("Frame: %d bytes\n", len(cp))
-		yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
-		for i := range yuyv.Cb {
-			ii := i * 4
-			yuyv.Y[i*2] = cp[ii]
-			yuyv.Y[i*2+1] = cp[ii+2]
-			yuyv.Cb[i] = cp[ii+1]
-			yuyv.Cr[i] = cp[ii+3]
-
-		}
-		tiny := resize.Resize(24, 24, yuyv, resize.Lanczos3)
-		b := tiny.Bounds()
-		gray := image.NewGray(b)
-		for y := 0; y < b.Max.Y; y++ {
-			for x := 0; x < b.Max.X; x++ {
-				original := tiny.At(x, y)
-				pixel := color.GrayModel.Convert(original)
-				gray.Set(x, y, pixel)
-			}
-		}
-
-		output, err := os.Create("test.png")
+	for vc.Stream {
+		frame, err := camera.ReadFrame()
 		if err != nil {
 			panic(err)
 		}
-		defer output.Close()
-		png.Encode(output, gray)
+		if len(frame) != 0 {
+			if len(cp) < len(frame) {
+				cp = make([]byte, len(frame))
+			}
+			copy(cp, frame)
+			fmt.Printf("Frame: %d bytes\n", len(cp))
+			yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
+			for i := range yuyv.Cb {
+				ii := i * 4
+				yuyv.Y[i*2] = cp[ii]
+				yuyv.Y[i*2+1] = cp[ii+2]
+				yuyv.Cb[i] = cp[ii+1]
+				yuyv.Cr[i] = cp[ii+3]
+
+			}
+			tiny := resize.Resize(24, 24, yuyv, resize.Lanczos3)
+			b := tiny.Bounds()
+			gray := image.NewGray(b)
+			for y := 0; y < b.Max.Y; y++ {
+				for x := 0; x < b.Max.X; x++ {
+					original := tiny.At(x, y)
+					pixel := color.GrayModel.Convert(original)
+					gray.Set(x, y, pixel)
+				}
+			}
+			width, height := b.Max.X, b.Max.Y
+			pixels := make([][]float64, height)
+			for i := range pixels {
+				pixels[i] = make([]float64, width)
+			}
+			for i := 0; i < width; i += 8 {
+				for j := 0; j < height; j += 8 {
+					for x := 0; x < 8; x++ {
+						for y := 0; y < 8; y++ {
+							pixels[y][x] = float64(gray.At(i+x, j+y).(color.Gray).Y) / 255
+						}
+					}
+					output := fft.FFT2Real(pixels)
+					for x := 0; x < 8; x++ {
+						for y := 0; y < 8; y++ {
+							pixels[y][x] = cmplx.Abs(output[y][x]) / float64(width*height)
+						}
+					}
+				}
+			}
+			select {
+			case vc.Images <- Frame{
+				Frame: yuyv,
+				DCT:   pixels,
+			}:
+			default:
+				fmt.Println("drop")
+			}
+		}
 	}
 }
 
@@ -342,13 +393,76 @@ func main() {
 	if *FlagPicture {
 		//picture()
 		stream := NewStreamCamera()
+		left := NewV4LCamera()
+		right := NewV4LCamera()
 		go stream.Start()
-		for i := 0; i < 8; i++ {
-			image := <-stream.Images
-			_ = image
-			fmt.Println("center", i)
+		go left.Start("/dev/videol")
+		go right.Start("/dev/videor")
+		i, j, k := 0, 0, 0
+		var c, l, r []*image.Paletted
+		for i < 32 || j < 32 || k < 32 {
+			select {
+			case img := <-stream.Images:
+				opts := gif.Options{
+					NumColors: 256,
+					Drawer:    draw.FloydSteinberg,
+				}
+				bounds := img.Frame.Bounds()
+				paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
+				if opts.Quantizer != nil {
+					paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
+				}
+				opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
+				c = append(c, paletted)
+				fmt.Println("center", i)
+				i++
+			case img := <-left.Images:
+				opts := gif.Options{
+					NumColors: 256,
+					Drawer:    draw.FloydSteinberg,
+				}
+				bounds := img.Frame.Bounds()
+				paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
+				if opts.Quantizer != nil {
+					paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
+				}
+				opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
+				l = append(l, paletted)
+				fmt.Println("left", j)
+				j++
+			case img := <-right.Images:
+				opts := gif.Options{
+					NumColors: 256,
+					Drawer:    draw.FloydSteinberg,
+				}
+				bounds := img.Frame.Bounds()
+				paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
+				if opts.Quantizer != nil {
+					paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
+				}
+				opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
+				r = append(r, paletted)
+				fmt.Println("right", k)
+				k++
+			}
 		}
 		stream.Stream = false
+		left.Stream = false
+		right.Stream = false
+		process := func(name string, images []*image.Paletted) {
+			animation := &gif.GIF{}
+			for _, paletted := range images {
+				animation.Image = append(animation.Image, paletted)
+				animation.Delay = append(animation.Delay, 0)
+			}
+
+			f, _ := os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0600)
+			defer f.Close()
+			gif.EncodeAll(f, animation)
+		}
+		process("center.gif", c)
+		process("left.gif", l)
+		process("right.gif", r)
 		return
 	}
 
