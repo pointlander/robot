@@ -21,6 +21,7 @@ require (
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12 // indirect
 	github.com/pointlander/datum/iris v0.0.0-20200802052503-0ee610caba95 // indirect
+	github.com/zergon321/reisen v0.1.6 // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69 // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
