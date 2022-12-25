@@ -57,6 +57,13 @@ const (
 	ModeAuto
 )
 
+const (
+	// Width is the width of the fft
+	Width = 24
+	// Height is the height of the fft
+	Height = 24
+)
+
 var (
 	// FlagPicture is the flag for taking a picture
 	FlagPicture = flag.Bool("picture", false, "take a picture")
@@ -174,7 +181,7 @@ func (sc *StreamCamera) Start() {
 				continue
 			}
 
-			tiny := resize.Resize(24, 24, videoFrame.Image(), resize.Lanczos3)
+			tiny := resize.Resize(Width, Height, videoFrame.Image(), resize.Lanczos3)
 			b := tiny.Bounds()
 			gray := image.NewGray(b)
 			for y := 0; y < b.Max.Y; y++ {
@@ -189,19 +196,15 @@ func (sc *StreamCamera) Start() {
 			for i := range pixels {
 				pixels[i] = make([]float64, width)
 			}
-			for i := 0; i < width; i += 8 {
-				for j := 0; j < height; j += 8 {
-					for x := 0; x < 8; x++ {
-						for y := 0; y < 8; y++ {
-							pixels[y][x] = float64(gray.At(i+x, j+y).(color.Gray).Y) / 255
-						}
-					}
-					output := fft.FFT2Real(pixels)
-					for x := 0; x < 8; x++ {
-						for y := 0; y < 8; y++ {
-							pixels[y][x] = cmplx.Abs(output[y][x]) / float64(width*height)
-						}
-					}
+			for j := 0; j < height; j++ {
+				for i := 0; i < width; i++ {
+					pixels[j][i] = float64(gray.At(i, j).(color.Gray).Y) / 255
+				}
+			}
+			output := fft.FFT2Real(pixels)
+			for j := 0; j < height; j++ {
+				for i := 0; i < width; i++ {
+					pixels[j][i] = cmplx.Abs(output[j][i]) / float64(width*height)
 				}
 			}
 			select {
@@ -559,166 +562,67 @@ func main() {
 	pwmUpDownServo := 1500
 	pwmLeftRightServo := 1500
 
+	stream := NewStreamCamera()
+	left := NewV4LCamera()
+	right := NewV4LCamera()
+	go stream.Start()
+	go left.Start("/dev/videol")
+	go right.Start("/dev/videor")
+
 	go func() {
-		runtime.LockOSThread()
-		camera, err := webcam.Open("/dev/video0")
-		if err != nil {
-			panic(err)
-		}
-		defer camera.Close()
+		net := occam.NewNetwork(Width*Height, 3)
 
-		format_desc := camera.GetSupportedFormats()
-		var formats []webcam.PixelFormat
-		for f := range format_desc {
-			formats = append(formats, f)
-		}
-		sort.Slice(formats, func(i, j int) bool {
-			return format_desc[formats[i]] < format_desc[formats[j]]
-		})
-		println("Available formats: ")
-		for i, value := range formats {
-			fmt.Printf("[%d] %s\n", i+1, format_desc[value])
-		}
-		format := formats[1]
-
-		fmt.Printf("Supported frame sizes for format %s\n", format_desc[format])
-		frames := FrameSizes(camera.GetSupportedFrameSizes(format))
-		sort.Sort(frames)
-		for i, value := range frames {
-			fmt.Printf("[%d] %s\n", i+1, value.GetString())
-		}
-		size := frames[0]
-
-		f, w, h, err := camera.SetImageFormat(format, uint32(size.MaxWidth), uint32(size.MaxHeight))
-		if err != nil {
-			panic(err)
-		} else {
-			fmt.Printf("Resulting image format: %s (%dx%d)\n", format_desc[f], w, h)
-		}
-
-		err = camera.StartStreaming()
-		if err != nil {
-			panic(err)
-		}
-
-		net := occam.NewNetwork(64, 9)
-
-		var cp []byte
 		for running {
-			err = camera.WaitForFrame(5)
-
-			switch err.(type) {
-			case nil:
-			case *webcam.Timeout:
-				fmt.Fprint(os.Stderr, err.Error())
-				continue
-			default:
-				panic(err.Error())
+			var line [][]float64
+			var index int
+			select {
+			case frame := <-stream.Images:
+				index = 0
+				line = frame.DCT
+			case frame := <-left.Images:
+				index = 1
+				line = frame.DCT
+			case frame := <-right.Images:
+				index = 2
+				line = frame.DCT
+			}
+			i := 0
+			for y := 0; y < Height; y++ {
+				for x := 0; x < Width; x++ {
+					net.Point.X[index*Width*Height+i] = float32(line[y][x])
+					i++
+				}
 			}
 
-			frame, err := camera.ReadFrame()
-			if len(frame) != 0 {
-				if len(cp) < len(frame) {
-					cp = make([]byte, len(frame))
+			max, index := float32(0.0), 0
+			for i := 0; i < 3; i++ {
+				for i, value := range net.Point.X[i*Width*Height : (i+1)*Width*Height] {
+					net.Input.X[i] = float32(value)
 				}
-				copy(cp, frame)
-				fmt.Printf("Frame: %d bytes\n", len(cp))
-				yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
-				for i := range yuyv.Cb {
-					ii := i * 4
-					yuyv.Y[i*2] = cp[ii]
-					yuyv.Y[i*2+1] = cp[ii+2]
-					yuyv.Cb[i] = cp[ii+1]
-					yuyv.Cr[i] = cp[ii+3]
-
-				}
-				tiny := resize.Resize(24, 24, yuyv, resize.Lanczos3)
-				b := tiny.Bounds()
-				gray := image.NewGray(b)
-				for y := 0; y < b.Max.Y; y++ {
-					for x := 0; x < b.Max.X; x++ {
-						original := tiny.At(x, y)
-						pixel := color.GrayModel.Convert(original)
-						gray.Set(x, y, pixel)
+				net.Cost(func(a *tf32.V) bool {
+					if a.X[0] > max {
+						max = a.X[0]
+						index = i
 					}
+					return true
+				})
+			}
+			if mode == ModeAuto {
+				switch index {
+				case 0:
+					fmt.Println("Forward")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateUp
+				case 1:
+					fmt.Println("Left")
+					joystickLeft = JoystickStateDown
+					joystickRight = JoystickStateUp
+				case 2:
+					fmt.Println("Right")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateDown
 				}
-				width, height, index := b.Max.X, b.Max.Y, 0
-				pixels := make([][]float64, height)
-				for i := range pixels {
-					pixels[i] = make([]float64, width)
-				}
-				for i := 0; i < width; i += 8 {
-					for j := 0; j < height; j += 8 {
-						for x := 0; x < 8; x++ {
-							for y := 0; y < 8; y++ {
-								pixels[y][x] = float64(gray.At(i+x, j+y).(color.Gray).Y) / 255
-							}
-						}
-						output := fft.FFT2Real(pixels)
-						for x := 0; x < 8; x++ {
-							for y := 0; y < 8; y++ {
-								net.Point.X[index] = float32(cmplx.Abs(output[y][x]) / float64(width*height))
-								index++
-							}
-						}
-					}
-				}
-				max, index := float32(0.0), 0
-				for i := 0; i < 9; i++ {
-					for i, value := range net.Point.X[i*32 : (i+1)*32] {
-						net.Input.X[i] = float32(value)
-					}
-					net.Cost(func(a *tf32.V) bool {
-						if a.X[0] > max {
-							max = a.X[0]
-							index = i
-						}
-						return true
-					})
-				}
-				if mode == ModeAuto {
-					switch index {
-					case 0:
-						fmt.Println("Left")
-						joystickLeft = JoystickStateUp
-						joystickRight = JoystickStateDown
-					case 1:
-						fmt.Println("Forward")
-						joystickLeft = JoystickStateUp
-						joystickRight = JoystickStateUp
-					case 2:
-						fmt.Println("Right")
-						joystickLeft = JoystickStateDown
-						joystickRight = JoystickStateUp
-					case 3:
-						fmt.Println("Left Forward")
-						joystickLeft = JoystickStateUp
-						joystickRight = JoystickStateUp
-					case 4:
-						fmt.Println("Forward")
-						joystickLeft = JoystickStateUp
-						joystickRight = JoystickStateUp
-					case 5:
-						fmt.Println("Right Forward")
-						joystickLeft = JoystickStateUp
-						joystickRight = JoystickStateUp
-					case 6:
-						fmt.Println("Left Backward")
-						joystickLeft = JoystickStateDown
-						joystickRight = JoystickStateNone
-					case 7:
-						fmt.Println("Backward")
-						joystickLeft = JoystickStateDown
-						joystickRight = JoystickStateDown
-					case 8:
-						fmt.Println("Right Backward")
-						joystickLeft = JoystickStateNone
-						joystickRight = JoystickStateDown
-					}
-					update()
-				}
-			} else if err != nil {
-				panic(err)
+				update()
 			}
 		}
 	}()
