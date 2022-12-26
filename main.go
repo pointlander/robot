@@ -62,6 +62,8 @@ const (
 	Width = 24
 	// Height is the height of the fft
 	Height = 24
+	// States is the number of states
+	States = 3
 )
 
 var (
@@ -570,8 +572,8 @@ func main() {
 	go right.Start("/dev/videor")
 
 	go func() {
-		net := occam.NewNetwork(Width*Height, 3)
-
+		net, s := occam.NewNetwork(Width*Height, 3), 0
+		var state [States]int
 		for running {
 			var line [][]float64
 			var index int
@@ -606,6 +608,22 @@ func main() {
 					}
 					return true
 				})
+			}
+			state[s] = index
+			s = (s + 1) % States
+			var histogram [States]int
+			for _, value := range state {
+				histogram[value]++
+			}
+			index = 0
+			{
+				max := 0
+				for i, value := range histogram {
+					if value > max {
+						max = value
+						index = i
+					}
+				}
 			}
 			if mode == ModeAuto {
 				switch index {
