@@ -64,6 +64,8 @@ const (
 	Height = 24
 	// States is the number of states
 	States = 3
+	// Memory is the sive of memory per state
+	Memory = 3
 )
 
 var (
@@ -195,18 +197,17 @@ func (sc *StreamCamera) Start() {
 			}
 			width, height := b.Max.X, b.Max.Y
 			pixels := make([][]float64, height)
-			for i := range pixels {
-				pixels[i] = make([]float64, width)
-			}
-			for j := 0; j < height; j++ {
-				for i := 0; i < width; i++ {
-					pixels[j][i] = float64(gray.At(i, j).(color.Gray).Y) / 255
+			for j := range pixels {
+				pix := make([]float64, width)
+				for i := range pix {
+					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
 				}
+				pixels[j] = pix
 			}
 			output := fft.FFT2Real(pixels)
-			for j := 0; j < height; j++ {
-				for i := 0; i < width; i++ {
-					pixels[j][i] = cmplx.Abs(output[j][i]) / float64(width*height)
+			for j, pix := range pixels {
+				for i := range pix {
+					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
 				}
 			}
 			select {
@@ -333,7 +334,11 @@ func (vc *V4LCamera) Start(device string) {
 	for vc.Stream {
 		frame, err := camera.ReadFrame()
 		if err != nil {
-			panic(err)
+			time.Sleep(time.Second)
+			fmt.Println(device, err)
+			continue
+		} else {
+			fmt.Println(device)
 		}
 		if len(frame) != 0 {
 			if len(cp) < len(frame) {
@@ -350,7 +355,7 @@ func (vc *V4LCamera) Start(device string) {
 				yuyv.Cr[i] = cp[ii+3]
 
 			}
-			tiny := resize.Resize(24, 24, yuyv, resize.Lanczos3)
+			tiny := resize.Resize(Width, Height, yuyv, resize.Lanczos3)
 			b := tiny.Bounds()
 			gray := image.NewGray(b)
 			for y := 0; y < b.Max.Y; y++ {
@@ -362,22 +367,17 @@ func (vc *V4LCamera) Start(device string) {
 			}
 			width, height := b.Max.X, b.Max.Y
 			pixels := make([][]float64, height)
-			for i := range pixels {
-				pixels[i] = make([]float64, width)
+			for j := range pixels {
+				pix := make([]float64, width)
+				for i := range pix {
+					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
+				}
+				pixels[j] = pix
 			}
-			for i := 0; i < width; i += 8 {
-				for j := 0; j < height; j += 8 {
-					for x := 0; x < 8; x++ {
-						for y := 0; y < 8; y++ {
-							pixels[y][x] = float64(gray.At(i+x, j+y).(color.Gray).Y) / 255
-						}
-					}
-					output := fft.FFT2Real(pixels)
-					for x := 0; x < 8; x++ {
-						for y := 0; y < 8; y++ {
-							pixels[y][x] = cmplx.Abs(output[y][x]) / float64(width*height)
-						}
-					}
+			output := fft.FFT2Real(pixels)
+			for j, pix := range pixels {
+				for i := range pix {
+					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
 				}
 			}
 			select {
