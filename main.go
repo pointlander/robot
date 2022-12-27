@@ -572,8 +572,9 @@ func main() {
 	go right.Start("/dev/videor")
 
 	go func() {
-		net, s := occam.NewNetwork(Width*Height, 3), 0
+		net, s := occam.NewNetwork(Width*Height, 3*Memory), 0
 		var state [States]int
+		var Indexes [3]int
 		for running {
 			var line [][]float64
 			var index int
@@ -588,16 +589,17 @@ func main() {
 				index = 2
 				line = frame.DCT
 			}
-			i := 0
+			offset, i := Memory*index*Width*Height+Indexes[index]*Width*Height, 0
 			for y := 0; y < Height; y++ {
 				for x := 0; x < Width; x++ {
-					net.Point.X[index*Width*Height+i] = float32(line[y][x])
+					net.Point.X[offset+i] = float32(line[y][x])
 					i++
 				}
 			}
+			Indexes[index] = (Indexes[index] + 1) % Memory
 
 			max, index := float32(0.0), 0
-			for i := 0; i < 3; i++ {
+			for i := 0; i < 3*Memory; i++ {
 				for i, value := range net.Point.X[i*Width*Height : (i+1)*Width*Height] {
 					net.Input.X[i] = float32(value)
 				}
@@ -608,6 +610,13 @@ func main() {
 					}
 					return true
 				})
+			}
+			if index < Memory {
+				index = 0
+			} else if index < 2*Memory {
+				index = 1
+			} else {
+				index = 2
 			}
 			state[s] = index
 			s = (s + 1) % States
