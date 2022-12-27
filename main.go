@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"image/gif"
 	"io"
+	"math"
 	"math/cmplx"
 	"os"
 	"os/exec"
@@ -596,18 +597,32 @@ func main() {
 				}
 			}
 
-			max, index := float32(0.0), 0
+			e := [3]float32{}
 			for i := 0; i < 3; i++ {
 				for i, value := range net.Point.X[i*Width*Height : (i+1)*Width*Height] {
 					net.Input.X[i] = float32(value)
 				}
 				net.Cost(func(a *tf32.V) bool {
-					if a.X[0] > max {
-						max = a.X[0]
-						index = i
-					}
+					e[i] = a.X[0]
 					return true
 				})
+			}
+			fmt.Println(e)
+			sum := float32(0.0)
+			for i := 0; i < 3; i++ {
+				sum += e[i]
+			}
+			sum /= 3
+			index, min := 0, float32(math.MaxFloat32)
+			for i := 0; i < 3; i++ {
+				a := e[i] - sum
+				if a < 0 {
+					a = -a
+				}
+				if a < min {
+					min = a
+					index = i
+				}
 			}
 			state[s] = index
 			s = (s + 1) % States
