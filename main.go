@@ -66,7 +66,7 @@ const (
 	// States is the number of states
 	States = 3
 	// Memory is the sive of memory per state
-	Memory = 3
+	Memory = 32
 )
 
 var (
@@ -217,7 +217,7 @@ func (sc *StreamCamera) Start() {
 				DCT:   pixels,
 			}:
 			default:
-				fmt.Println("drop")
+				fmt.Println("drop center")
 			}
 		case reisen.StreamAudio:
 			s := media.Streams()[pkt.StreamIndex()].(*reisen.AudioStream)
@@ -322,20 +322,20 @@ func (vc *V4LCamera) Start(device string) {
 	defer camera.StopStreaming()
 
 	var cp []byte
-	err = camera.WaitForFrame(5)
-
-	switch err.(type) {
-	case nil:
-	case *webcam.Timeout:
-		fmt.Fprint(os.Stderr, err.Error())
-	default:
-		panic(err.Error())
-	}
-
 	for vc.Stream {
+		err := camera.WaitForFrame(5)
+
+		switch err.(type) {
+		case nil:
+		case *webcam.Timeout:
+			fmt.Println(device, err)
+			continue
+		default:
+			panic(err)
+		}
+
 		frame, err := camera.ReadFrame()
 		if err != nil {
-			time.Sleep(time.Second)
 			fmt.Println(device, err)
 			continue
 		} else {
@@ -387,7 +387,7 @@ func (vc *V4LCamera) Start(device string) {
 				DCT:   pixels,
 			}:
 			default:
-				fmt.Println("drop")
+				fmt.Println("drop", device)
 			}
 		}
 	}
