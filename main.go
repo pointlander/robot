@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"image/gif"
 	"io"
+	"math"
 	"math/cmplx"
 	"os"
 	"os/exec"
@@ -563,7 +564,6 @@ func main() {
 
 	pwmUpDownServo := 1500
 	pwmLeftRightServo := 1500
-
 	stream := NewStreamCamera()
 	left := NewV4LCamera()
 	right := NewV4LCamera()
@@ -572,7 +572,9 @@ func main() {
 	go right.Start("/dev/videor")
 
 	go func() {
-		net, s := occam.NewNetwork(Width*Height, 3*Memory), 0
+		var time float64
+		w := Width*Height + 4
+		net, s := occam.NewNetwork(w, 3*Memory), 0
 		var state [States]int
 		var Indexes [3]int
 		for running {
@@ -589,18 +591,23 @@ func main() {
 				index = 2
 				line = frame.DCT
 			}
-			offset, i := Memory*index*Width*Height+Indexes[index]*Width*Height, 0
+			offset, i := Memory*index*w+Indexes[index]*w, 0
 			for y := 0; y < Height; y++ {
 				for x := 0; x < Width; x++ {
 					net.Point.X[offset+i] = float32(line[y][x])
 					i++
 				}
 			}
+			net.Point.X[offset+Width*Height] = 0
+			net.Point.X[offset+Width*Height+1] = 0
+			net.Point.X[offset+Width*Height+2] = 0
+			net.Point.X[offset+Width*Height+index] = 1
+			net.Point.X[offset+Width*Height+3] = float32(math.Sin(2 * time * math.Pi))
 			Indexes[index] = (Indexes[index] + 1) % Memory
 
 			max, index := float32(0.0), 0
 			for i := 0; i < 3*Memory; i++ {
-				for i, value := range net.Point.X[i*Width*Height : (i+1)*Width*Height] {
+				for i, value := range net.Point.X[i*w : (i+1)*w] {
 					net.Input.X[i] = float32(value)
 				}
 				net.Cost(func(a *tf32.V) bool {
@@ -651,6 +658,7 @@ func main() {
 				}
 				update()
 			}
+			time += 1 / 256.0
 		}
 	}()
 
