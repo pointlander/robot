@@ -86,9 +86,10 @@ type Frame struct {
 
 // Column is like a brain column
 type Column struct {
-	Net   *occam.Network
-	Max   float32
-	Index int
+	Net     *occam.Network
+	Max     float32
+	Index   int
+	Indexes [States]int
 }
 
 func picture() {
@@ -278,7 +279,6 @@ func main() {
 			columns[i].Net = occam.NewNetwork(w, 3*Memory)
 			columns[i].Max = -1
 		}
-		var Indexes [3]int
 		for running {
 			var line [][]float64
 			var index int
@@ -304,7 +304,7 @@ func main() {
 				}
 			}
 			net := columns[c].Net
-			offset, i := Memory*index*w+Indexes[index]*w, 0
+			offset, i := Memory*index*w+columns[c].Indexes[index]*w, 0
 			for y := 0; y < Height; y++ {
 				for x := 0; x < Width; x++ {
 					net.Point.X[offset+i] = float32(line[y][x])
@@ -316,7 +316,7 @@ func main() {
 			net.Point.X[offset+Width*Height+2] = 0
 			net.Point.X[offset+Width*Height+index] = 1
 			net.Point.X[offset+Width*Height+3] = float32(math.Sin(2 * time * math.Pi))
-			Indexes[index] = (Indexes[index] + 1) % Memory
+			columns[c].Indexes[index] = (columns[c].Indexes[index] + 1) % Memory
 
 			max, index = float32(0.0), 0
 			for i := 0; i < 3*Memory; i++ {
@@ -340,22 +340,24 @@ func main() {
 			}
 			columns[c].Max = max
 			columns[c].Index = index
-
 			sort.Slice(columns[:], func(i, j int) bool {
 				return columns[i].Max > columns[j].Max
 			})
-			var history [States]int
-			for i := range columns[:3] {
-				history[columns[i].Index]++
+			index = columns[0].Index
+			var history [3]float32
+			for i := range columns {
+				if columns[i].Max < 0 {
+					continue
+				}
+				history[columns[i].Index] += columns[i].Max
 			}
-			m, c := 0, 0
-			for i := range history {
-				if history[i] > m {
-					m, c = history[i], i
-					break
+			max, index = float32(0.0), 0
+			for i, value := range history {
+				if value > max {
+					max = value
+					index = i
 				}
 			}
-			index = columns[c].Index
 			if mode == ModeAuto {
 				switch index {
 				case 0:
