@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"image/gif"
 	"math"
+	"math/rand"
 	"os"
 	"sort"
 	"time"
@@ -293,7 +294,8 @@ func main() {
 				index = 2
 				line = frame.DCT
 			}
-			max, c := float32(0.0), 0
+			// todo: make random
+			/*max, c := float32(0.0), 0
 			for i := range columns {
 				if columns[i].Max < 0 {
 					c = i
@@ -302,7 +304,8 @@ func main() {
 					max = columns[i].Max
 					c = i
 				}
-			}
+			}*/
+			c := rand.Intn(len(columns))
 			net := columns[c].Net
 			offset, i := Memory*index*w+columns[c].Indexes[index]*w, 0
 			for y := 0; y < Height; y++ {
@@ -318,7 +321,7 @@ func main() {
 			net.Point.X[offset+Width*Height+3] = float32(math.Sin(2 * time * math.Pi))
 			columns[c].Indexes[index] = (columns[c].Indexes[index] + 1) % Memory
 
-			max, index = float32(0.0), 0
+			max, index := float32(0.0), 0
 			for i := 0; i < 3*Memory; i++ {
 				for i, value := range net.Point.X[i*w : (i+1)*w] {
 					net.Input.X[i] = float32(value)
