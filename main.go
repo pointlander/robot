@@ -14,6 +14,7 @@ import (
 	"image/gif"
 	"math"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/pointlander/gradient/tf32"
@@ -57,7 +58,7 @@ const (
 	// States is the number of states
 	States = 3
 	// Memory is the sive of memory per state
-	Memory = 32
+	Memory = 8
 )
 
 var (
@@ -81,6 +82,13 @@ func (j JoystickState) String() string {
 type Frame struct {
 	Frame image.Image
 	DCT   [][]float64
+}
+
+// Column is like a brain column
+type Column struct {
+	Net   *occam.Network
+	Max   float32
+	Index int
 }
 
 func picture() {
@@ -265,8 +273,11 @@ func main() {
 
 		var time float64
 		w := Width*Height + 4
-		net, s := occam.NewNetwork(w, 3*Memory), 0
-		var state [States]int
+		columns := [8]Column{}
+		for i := range columns {
+			columns[i].Net = occam.NewNetwork(w, 3*Memory)
+			columns[i].Max = -1
+		}
 		var Indexes [3]int
 		for running {
 			var line [][]float64
@@ -282,6 +293,17 @@ func main() {
 				index = 2
 				line = frame.DCT
 			}
+			max, c := float32(0.0), 0
+			for i := range columns {
+				if columns[i].Max < 0 {
+					c = i
+					break
+				} else if columns[i].Max > max {
+					max = columns[i].Max
+					c = i
+				}
+			}
+			net := columns[c].Net
 			offset, i := Memory*index*w+Indexes[index]*w, 0
 			for y := 0; y < Height; y++ {
 				for x := 0; x < Width; x++ {
@@ -296,7 +318,7 @@ func main() {
 			net.Point.X[offset+Width*Height+3] = float32(math.Sin(2 * time * math.Pi))
 			Indexes[index] = (Indexes[index] + 1) % Memory
 
-			max, index := float32(0.0), 0
+			max, index = float32(0.0), 0
 			for i := 0; i < 3*Memory; i++ {
 				for i, value := range net.Point.X[i*w : (i+1)*w] {
 					net.Input.X[i] = float32(value)
@@ -316,22 +338,24 @@ func main() {
 			} else {
 				index = 2
 			}
-			state[s] = index
-			s = (s + 1) % States
-			var histogram [States]int
-			for _, value := range state {
-				histogram[value]++
+			columns[c].Max = max
+			columns[c].Index = index
+
+			sort.Slice(columns[:], func(i, j int) bool {
+				return columns[i].Max > columns[j].Max
+			})
+			var history [States]int
+			for i := range columns[:3] {
+				history[columns[i].Index]++
 			}
-			index = 0
-			{
-				max := 0
-				for i, value := range histogram {
-					if value > max {
-						max = value
-						index = i
-					}
+			m, c := 0, 0
+			for i := range history {
+				if history[i] > m {
+					m, c = history[i], i
+					break
 				}
 			}
+			index = columns[c].Index
 			if mode == ModeAuto {
 				switch index {
 				case 0:
