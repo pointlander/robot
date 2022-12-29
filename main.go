@@ -12,25 +12,16 @@ import (
 	"image/color/palette"
 	"image/draw"
 	"image/gif"
-	"io"
 	"math"
-	"math/cmplx"
 	"os"
-	"os/exec"
-	"runtime"
-	"sort"
 	"time"
 
-	"github.com/mjibson/go-dsp/fft"
 	"github.com/pointlander/gradient/tf32"
 	"github.com/pointlander/occam"
 
-	"github.com/blackjack/webcam"
-	"github.com/nfnt/resize"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/warthog618/gpiod"
 	"github.com/warthog618/gpiod/device/rpi"
-	"github.com/zergon321/reisen"
 )
 
 var joysticks = make(map[int]*sdl.Joystick)
@@ -86,389 +77,91 @@ func (j JoystickState) String() string {
 	}
 }
 
-type FrameSizes []webcam.FrameSize
-
-func (slice FrameSizes) Len() int {
-	return len(slice)
-}
-
-//For sorting purposes
-func (slice FrameSizes) Less(i, j int) bool {
-	ls := slice[i].MaxWidth * slice[i].MaxHeight
-	rs := slice[j].MaxWidth * slice[j].MaxHeight
-	return ls < rs
-}
-
-//For sorting purposes
-func (slice FrameSizes) Swap(i, j int) {
-	slice[i], slice[j] = slice[j], slice[i]
-}
-
 // Frame is a video frame
 type Frame struct {
 	Frame image.Image
 	DCT   [][]float64
 }
 
-// StreamCamera is a camera that is from a stream
-type StreamCamera struct {
-	Stream bool
-	Images chan Frame
-}
-
-// NewStreamCamera creates a new streaming camera
-func NewStreamCamera() *StreamCamera {
-	return &StreamCamera{
-		Stream: true,
-		Images: make(chan Frame, 8),
-	}
-}
-
-// Start starts streaming
-func (sc *StreamCamera) Start() {
-	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
-	input, err := command.StdoutPipe()
-	if err != nil {
-		panic(err)
-	}
-	err = command.Start()
-	if err != nil {
-		panic(err)
-	}
-	output, err := os.OpenFile("center", os.O_RDWR, 0600)
-	if err != nil {
-		panic(err)
-	}
-	go io.Copy(output, input)
-	defer close(sc.Images)
-
-	media, err := reisen.NewMedia("center")
-	if err != nil {
-		panic(err)
-	}
-	defer media.Close()
-	err = media.OpenDecode()
-	if err != nil {
-		panic(err)
-	}
-
-	for sc.Stream {
-		var pkt *reisen.Packet
-		pkt, gotPacket, err := media.ReadPacket()
-		if err != nil {
-			panic(err)
-		}
-
-		if !gotPacket {
-			break
-		}
-
-		switch pkt.Type() {
-		case reisen.StreamVideo:
-			s := media.Streams()[pkt.StreamIndex()].(*reisen.VideoStream)
-			if !s.Opened() {
-				err = s.Open()
-				if err != nil {
-					panic(err)
-				}
+func picture() {
+	stream := NewStreamCamera()
+	left := NewV4LCamera()
+	right := NewV4LCamera()
+	go stream.Start()
+	go left.Start("/dev/videol")
+	go right.Start("/dev/videor")
+	i, j, k := 0, 0, 0
+	var c, l, r []*image.Paletted
+	for i < 32 || j < 32 || k < 32 {
+		select {
+		case img := <-stream.Images:
+			opts := gif.Options{
+				NumColors: 256,
+				Drawer:    draw.FloydSteinberg,
 			}
-
-			videoFrame, gotFrame, err := s.ReadVideoFrame()
-			if err != nil {
-				panic(err)
+			bounds := img.Frame.Bounds()
+			paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
+			if opts.Quantizer != nil {
+				paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
 			}
-
-			if !gotFrame {
-				break
+			opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
+			c = append(c, paletted)
+			fmt.Println("center", i)
+			i++
+		case img := <-left.Images:
+			opts := gif.Options{
+				NumColors: 256,
+				Drawer:    draw.FloydSteinberg,
 			}
-
-			if videoFrame == nil {
-				continue
+			bounds := img.Frame.Bounds()
+			paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
+			if opts.Quantizer != nil {
+				paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
 			}
-
-			tiny := resize.Resize(Width, Height, videoFrame.Image(), resize.Lanczos3)
-			b := tiny.Bounds()
-			gray := image.NewGray(b)
-			for y := 0; y < b.Max.Y; y++ {
-				for x := 0; x < b.Max.X; x++ {
-					original := tiny.At(x, y)
-					pixel := color.GrayModel.Convert(original)
-					gray.Set(x, y, pixel)
-				}
+			opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
+			l = append(l, paletted)
+			fmt.Println("left", j)
+			j++
+		case img := <-right.Images:
+			opts := gif.Options{
+				NumColors: 256,
+				Drawer:    draw.FloydSteinberg,
 			}
-			width, height := b.Max.X, b.Max.Y
-			pixels := make([][]float64, height)
-			for j := range pixels {
-				pix := make([]float64, width)
-				for i := range pix {
-					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
-				}
-				pixels[j] = pix
+			bounds := img.Frame.Bounds()
+			paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
+			if opts.Quantizer != nil {
+				paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
 			}
-			output := fft.FFT2Real(pixels)
-			for j, pix := range pixels {
-				for i := range pix {
-					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
-				}
-			}
-			select {
-			case sc.Images <- Frame{
-				Frame: videoFrame.Image(),
-				DCT:   pixels,
-			}:
-			default:
-				fmt.Println("drop center")
-			}
-		case reisen.StreamAudio:
-			s := media.Streams()[pkt.StreamIndex()].(*reisen.AudioStream)
-
-			if !s.Opened() {
-				err = s.Open()
-				if err != nil {
-					panic(err)
-				}
-			}
-
-			audioFrame, gotFrame, err := s.ReadAudioFrame()
-			if err != nil {
-				panic(err)
-			}
-
-			if !gotFrame {
-				break
-			}
-
-			if audioFrame == nil {
-				continue
-			}
+			opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
+			r = append(r, paletted)
+			fmt.Println("right", k)
+			k++
 		}
 	}
-
-	for _, stream := range media.Streams() {
-		err = stream.Close()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	err = media.CloseDecode()
-	if err != nil {
-		panic(err)
-	}
-
-	err = command.Wait()
-	if err != nil {
-		panic(err)
-	}
-}
-
-// V4LCamera is a camera that is from a v4l device
-type V4LCamera struct {
-	Stream bool
-	Images chan Frame
-}
-
-// NewV4LCamera creates a new v4l camera
-func NewV4LCamera() *V4LCamera {
-	return &V4LCamera{
-		Stream: true,
-		Images: make(chan Frame, 8),
-	}
-}
-
-// Start starts streaming
-func (vc *V4LCamera) Start(device string) {
-	runtime.LockOSThread()
-	fmt.Println(device)
-	camera, err := webcam.Open(device)
-	if err != nil {
-		panic(err)
-	}
-	defer camera.Close()
-
-	format_desc := camera.GetSupportedFormats()
-	var formats []webcam.PixelFormat
-	for f := range format_desc {
-		formats = append(formats, f)
-	}
-	sort.Slice(formats, func(i, j int) bool {
-		return format_desc[formats[i]] < format_desc[formats[j]]
-	})
-	println("Available formats: ")
-	for i, value := range formats {
-		fmt.Printf("[%d] %s\n", i+1, format_desc[value])
-	}
-	format := formats[1]
-
-	fmt.Printf("Supported frame sizes for format %s\n", format_desc[format])
-	frames := FrameSizes(camera.GetSupportedFrameSizes(format))
-	sort.Sort(frames)
-	for i, value := range frames {
-		fmt.Printf("[%d] %s\n", i+1, value.GetString())
-	}
-	size := frames[0]
-
-	f, w, h, err := camera.SetImageFormat(format, uint32(size.MaxWidth), uint32(size.MaxHeight))
-	if err != nil {
-		panic(err)
-	} else {
-		fmt.Printf("Resulting image format: %s (%dx%d)\n", format_desc[f], w, h)
-	}
-
-	err = camera.StartStreaming()
-	if err != nil {
-		panic(err)
-	}
-	defer camera.StopStreaming()
-
-	var cp []byte
-	for vc.Stream {
-		err := camera.WaitForFrame(5)
-
-		switch err.(type) {
-		case nil:
-		case *webcam.Timeout:
-			fmt.Println(device, err)
-			continue
-		default:
-			panic(err)
+	stream.Stream = false
+	left.Stream = false
+	right.Stream = false
+	process := func(name string, images []*image.Paletted) {
+		animation := &gif.GIF{}
+		for _, paletted := range images {
+			animation.Image = append(animation.Image, paletted)
+			animation.Delay = append(animation.Delay, 0)
 		}
 
-		frame, err := camera.ReadFrame()
-		if err != nil {
-			fmt.Println(device, err)
-			continue
-		} else {
-			fmt.Println(device)
-		}
-		if len(frame) != 0 {
-			if len(cp) < len(frame) {
-				cp = make([]byte, len(frame))
-			}
-			copy(cp, frame)
-			fmt.Printf("Frame: %d bytes\n", len(cp))
-			yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
-			for i := range yuyv.Cb {
-				ii := i * 4
-				yuyv.Y[i*2] = cp[ii]
-				yuyv.Y[i*2+1] = cp[ii+2]
-				yuyv.Cb[i] = cp[ii+1]
-				yuyv.Cr[i] = cp[ii+3]
-
-			}
-			tiny := resize.Resize(Width, Height, yuyv, resize.Lanczos3)
-			b := tiny.Bounds()
-			gray := image.NewGray(b)
-			for y := 0; y < b.Max.Y; y++ {
-				for x := 0; x < b.Max.X; x++ {
-					original := tiny.At(x, y)
-					pixel := color.GrayModel.Convert(original)
-					gray.Set(x, y, pixel)
-				}
-			}
-			width, height := b.Max.X, b.Max.Y
-			pixels := make([][]float64, height)
-			for j := range pixels {
-				pix := make([]float64, width)
-				for i := range pix {
-					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
-				}
-				pixels[j] = pix
-			}
-			output := fft.FFT2Real(pixels)
-			for j, pix := range pixels {
-				for i := range pix {
-					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
-				}
-			}
-			select {
-			case vc.Images <- Frame{
-				Frame: yuyv,
-				DCT:   pixels,
-			}:
-			default:
-				fmt.Println("drop", device)
-			}
-		}
+		f, _ := os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0600)
+		defer f.Close()
+		gif.EncodeAll(f, animation)
 	}
+	process("center.gif", c)
+	process("left.gif", l)
+	process("right.gif", r)
 }
 
 func main() {
 	flag.Parse()
 
 	if *FlagPicture {
-		//picture()
-		stream := NewStreamCamera()
-		left := NewV4LCamera()
-		right := NewV4LCamera()
-		go stream.Start()
-		go left.Start("/dev/videol")
-		go right.Start("/dev/videor")
-		i, j, k := 0, 0, 0
-		var c, l, r []*image.Paletted
-		for i < 32 || j < 32 || k < 32 {
-			select {
-			case img := <-stream.Images:
-				opts := gif.Options{
-					NumColors: 256,
-					Drawer:    draw.FloydSteinberg,
-				}
-				bounds := img.Frame.Bounds()
-				paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
-				if opts.Quantizer != nil {
-					paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
-				}
-				opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
-				c = append(c, paletted)
-				fmt.Println("center", i)
-				i++
-			case img := <-left.Images:
-				opts := gif.Options{
-					NumColors: 256,
-					Drawer:    draw.FloydSteinberg,
-				}
-				bounds := img.Frame.Bounds()
-				paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
-				if opts.Quantizer != nil {
-					paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
-				}
-				opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
-				l = append(l, paletted)
-				fmt.Println("left", j)
-				j++
-			case img := <-right.Images:
-				opts := gif.Options{
-					NumColors: 256,
-					Drawer:    draw.FloydSteinberg,
-				}
-				bounds := img.Frame.Bounds()
-				paletted := image.NewPaletted(bounds, palette.Plan9[:opts.NumColors])
-				if opts.Quantizer != nil {
-					paletted.Palette = opts.Quantizer.Quantize(make(color.Palette, 0, opts.NumColors), img.Frame)
-				}
-				opts.Drawer.Draw(paletted, bounds, img.Frame, image.Point{})
-				r = append(r, paletted)
-				fmt.Println("right", k)
-				k++
-			}
-		}
-		stream.Stream = false
-		left.Stream = false
-		right.Stream = false
-		process := func(name string, images []*image.Paletted) {
-			animation := &gif.GIF{}
-			for _, paletted := range images {
-				animation.Image = append(animation.Image, paletted)
-				animation.Delay = append(animation.Delay, 0)
-			}
-
-			f, _ := os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0600)
-			defer f.Close()
-			gif.EncodeAll(f, animation)
-		}
-		process("center.gif", c)
-		process("left.gif", l)
-		process("right.gif", r)
+		picture()
 		return
 	}
 
@@ -562,16 +255,14 @@ func main() {
 		}
 	}
 
-	pwmUpDownServo := 1500
-	pwmLeftRightServo := 1500
-	stream := NewStreamCamera()
-	left := NewV4LCamera()
-	right := NewV4LCamera()
-	go stream.Start()
-	go left.Start("/dev/videol")
-	go right.Start("/dev/videor")
-
 	go func() {
+		stream := NewStreamCamera()
+		left := NewV4LCamera()
+		right := NewV4LCamera()
+		go stream.Start()
+		go left.Start("/dev/videol")
+		go right.Start("/dev/videor")
+
 		var time float64
 		w := Width*Height + 4
 		net, s := occam.NewNetwork(w, 3*Memory), 0
@@ -662,6 +353,8 @@ func main() {
 		}
 	}()
 
+	pwmUpDownServo := 1500
+	pwmLeftRightServo := 1500
 	for running {
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
