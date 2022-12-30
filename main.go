@@ -281,6 +281,7 @@ func main() {
 			columns[i].Max = -1
 		}
 		for running {
+			rnd := rand.New(rand.NewSource(1))
 			var line [][]float64
 			var index int
 			select {
@@ -294,18 +295,22 @@ func main() {
 				index = 2
 				line = frame.DCT
 			}
-			// todo: make random
-			/*max, c := float32(0.0), 0
+			sort.Slice(columns[:], func(i, j int) bool {
+				return columns[i].Max > columns[j].Max
+			})
+			total := float32(0.0)
 			for i := range columns {
-				if columns[i].Max < 0 {
+				total += columns[i].Max
+			}
+			c, b := 0, rnd.Float32()
+			bin := float32(0.0)
+			for i := range columns {
+				bin += columns[i].Max / total
+				if b < bin {
 					c = i
 					break
-				} else if columns[i].Max > max {
-					max = columns[i].Max
-					c = i
 				}
-			}*/
-			c := rand.Intn(len(columns))
+			}
 			net := columns[c].Net
 			offset, i := Memory*index*w+columns[c].Indexes[index]*w, 0
 			for y := 0; y < Height; y++ {
