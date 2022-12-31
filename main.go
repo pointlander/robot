@@ -54,14 +54,14 @@ const (
 )
 
 const (
-	// CameraNone is no camera
-	TypeCameraNone TypeCamera = iota
 	// CameraCenter is the center camera
-	TypeCameraCenter
+	TypeCameraCenter TypeCamera = iota
 	// CameraLeft is the left camera
 	TypeCameraLeft
 	// CameraRight is the right camera
 	TypeCameraRight
+	// CameraNone is no camera
+	TypeCameraNone
 )
 
 const (
@@ -288,6 +288,8 @@ func main() {
 	}
 
 	go func() {
+		rnd := rand.New(rand.NewSource(1))
+
 		center := NewStreamCamera()
 		left := NewV4LCamera()
 		right := NewV4LCamera()
@@ -299,10 +301,9 @@ func main() {
 		columns := [8]Column{}
 		for i := range columns {
 			columns[i].Net = occam.NewNetwork(NetWidth, 3*Memory)
-			columns[i].Max = 1
+			columns[i].Max = 8
 		}
 		for running {
-			rnd := rand.New(rand.NewSource(1))
 			var line [][]float64
 			var camera TypeCamera
 			select {
