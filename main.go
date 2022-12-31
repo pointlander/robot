@@ -299,7 +299,7 @@ func main() {
 		columns := [8]Column{}
 		for i := range columns {
 			columns[i].Net = occam.NewNetwork(NetWidth, 3*Memory)
-			columns[i].Max = -1
+			columns[i].Max = 1
 		}
 		for running {
 			rnd := rand.New(rand.NewSource(1))
