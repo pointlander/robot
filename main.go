@@ -33,6 +33,8 @@ type (
 	JoystickState uint
 	// Mode is the operating mode of the robot
 	Mode uint
+	// Camera is a camera
+	TypeCamera uint
 )
 
 const (
@@ -52,6 +54,17 @@ const (
 )
 
 const (
+	// CameraNone is no camera
+	TypeCameraNone TypeCamera = iota
+	// CameraCenter is the center camera
+	TypeCameraCenter
+	// CameraLeft is the left camera
+	TypeCameraLeft
+	// CameraRight is the right camera
+	TypeCameraRight
+)
+
+const (
 	// Width is the width of the fft
 	Width = 24
 	// Height is the height of the fft
@@ -60,6 +73,8 @@ const (
 	States = 3
 	// Memory is the sive of memory per state
 	Memory = 8
+	// NetWidth is the width of the network
+	NetWidth = Width*Height + 4
 )
 
 var (
@@ -85,12 +100,19 @@ type Frame struct {
 	DCT   [][]float64
 }
 
+// Entropy is the self entropy of a point
+type Entropy struct {
+	Entropy float32
+	Camera  TypeCamera
+}
+
 // Column is like a brain column
 type Column struct {
 	Net     *occam.Network
 	Max     float32
-	Index   int
+	Camera  TypeCamera
 	Indexes [States]int
+	Entropy [3 * Memory]Entropy
 }
 
 func picture() {
@@ -266,33 +288,32 @@ func main() {
 	}
 
 	go func() {
-		stream := NewStreamCamera()
+		center := NewStreamCamera()
 		left := NewV4LCamera()
 		right := NewV4LCamera()
-		go stream.Start()
+		go center.Start()
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
 		var time float64
-		w := Width*Height + 4
 		columns := [8]Column{}
 		for i := range columns {
-			columns[i].Net = occam.NewNetwork(w, 3*Memory)
+			columns[i].Net = occam.NewNetwork(NetWidth, 3*Memory)
 			columns[i].Max = -1
 		}
 		for running {
 			rnd := rand.New(rand.NewSource(1))
 			var line [][]float64
-			var index int
+			var camera TypeCamera
 			select {
-			case frame := <-stream.Images:
-				index = 0
+			case frame := <-center.Images:
+				camera = TypeCameraCenter
 				line = frame.DCT
 			case frame := <-left.Images:
-				index = 1
+				camera = TypeCameraLeft
 				line = frame.DCT
 			case frame := <-right.Images:
-				index = 2
+				camera = TypeCameraRight
 				line = frame.DCT
 			}
 			sort.Slice(columns[:], func(i, j int) bool {
@@ -312,7 +333,7 @@ func main() {
 				}
 			}
 			net := columns[c].Net
-			offset, i := Memory*index*w+columns[c].Indexes[index]*w, 0
+			offset, i := Memory*int(camera)*NetWidth+columns[c].Indexes[camera]*NetWidth, 0
 			for y := 0; y < Height; y++ {
 				for x := 0; x < Width; x++ {
 					net.Point.X[offset+i] = float32(line[y][x])
@@ -322,16 +343,18 @@ func main() {
 			net.Point.X[offset+Width*Height] = 0
 			net.Point.X[offset+Width*Height+1] = 0
 			net.Point.X[offset+Width*Height+2] = 0
-			net.Point.X[offset+Width*Height+index] = 1
+			net.Point.X[offset+Width*Height+int(camera)] = 1
 			net.Point.X[offset+Width*Height+3] = float32(math.Sin(2 * time * math.Pi))
-			columns[c].Indexes[index] = (columns[c].Indexes[index] + 1) % Memory
+			columns[c].Indexes[camera] = (columns[c].Indexes[camera] + 1) % Memory
 
 			max, index := float32(0.0), 0
 			for i := 0; i < 3*Memory; i++ {
-				for i, value := range net.Point.X[i*w : (i+1)*w] {
+				for i, value := range net.Point.X[i*NetWidth : (i+1)*NetWidth] {
 					net.Input.X[i] = float32(value)
 				}
 				net.Cost(func(a *tf32.V) bool {
+					columns[c].Entropy[i].Entropy = float32(a.X[0])
+					columns[c].Entropy[i].Camera = TypeCamera(i / Memory)
 					if a.X[0] > max {
 						max = a.X[0]
 						index = i
@@ -339,44 +362,47 @@ func main() {
 					return true
 				})
 			}
+			sort.Slice(columns[c].Entropy[:], func(i, j int) bool {
+				return columns[c].Entropy[i].Entropy > columns[c].Entropy[j].Entropy
+			})
 			if index < Memory {
-				index = 0
+				camera = TypeCameraCenter
 			} else if index < 2*Memory {
-				index = 1
+				camera = TypeCameraLeft
 			} else {
-				index = 2
+				camera = TypeCameraRight
 			}
 			columns[c].Max = max
-			columns[c].Index = index
+			columns[c].Camera = camera
 			sort.Slice(columns[:], func(i, j int) bool {
 				return columns[i].Max > columns[j].Max
 			})
-			index = columns[0].Index
+
 			var history [3]float32
 			for i := range columns {
 				if columns[i].Max < 0 {
 					continue
 				}
-				history[columns[i].Index] += columns[i].Max
+				history[columns[i].Camera] += columns[i].Max
 			}
-			max, index = float32(0.0), 0
+			max, camera = float32(0.0), TypeCameraNone
 			for i, value := range history {
 				if value > max {
 					max = value
-					index = i
+					camera = TypeCamera(i)
 				}
 			}
 			if mode == ModeAuto {
-				switch index {
-				case 0:
+				switch camera {
+				case TypeCameraCenter:
 					fmt.Println("Forward")
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateUp
-				case 1:
+				case TypeCameraLeft:
 					fmt.Println("Left")
 					joystickLeft = JoystickStateDown
 					joystickRight = JoystickStateUp
-				case 2:
+				case TypeCameraRight:
 					fmt.Println("Right")
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateDown
