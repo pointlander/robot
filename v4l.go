@@ -54,6 +54,7 @@ func NewV4LCamera() *V4LCamera {
 // Start starts streaming
 func (vc *V4LCamera) Start(device string) {
 	runtime.LockOSThread()
+	skip := 0
 	fmt.Println(device)
 	camera, err := webcam.Open(device)
 	if err != nil {
@@ -115,6 +116,13 @@ func (vc *V4LCamera) Start(device string) {
 			continue
 		} else {
 			fmt.Println(device)
+		}
+
+		if skip < 20 {
+			skip++
+		} else {
+			skip = 0
+			continue
 		}
 		if len(frame) != 0 {
 			if len(cp) < len(frame) {

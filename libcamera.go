@@ -34,6 +34,7 @@ func NewStreamCamera() *StreamCamera {
 
 // Start starts streaming
 func (sc *StreamCamera) Start() {
+	skip := 0
 	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
 	input, err := command.StdoutPipe()
 	if err != nil {
@@ -91,6 +92,13 @@ func (sc *StreamCamera) Start() {
 			}
 
 			if videoFrame == nil {
+				continue
+			}
+
+			if skip < 10 {
+				skip++
+			} else {
+				skip = 0
 				continue
 			}
 

@@ -113,6 +113,53 @@ type Column struct {
 	Camera  TypeCamera
 	Indexes [States]int
 	Entropy [3 * Memory]Entropy
+	Split   int
+}
+
+func split(entropy []Entropy) int {
+	sum := float32(0.0)
+	for _, e := range entropy {
+		sum += e.Entropy
+	}
+	avg, vari := sum/float32(len(entropy)), float32(0.0)
+	for _, e := range entropy {
+		difference := e.Entropy - avg
+		vari += difference * difference
+	}
+	vari /= float32(len(entropy))
+
+	index, max := 0, float32(0.0)
+	for i := 1; i < len(entropy); i++ {
+		suma, counta := float32(0.0), float32(0.0)
+		for _, e := range entropy[:i] {
+			suma += e.Entropy
+			counta++
+		}
+		avga, varia := suma/counta, float32(0.0)
+		for _, e := range entropy[:i] {
+			difference := e.Entropy - avga
+			varia += difference * difference
+		}
+		varia /= counta
+
+		sumb, countb := float32(0.0), float32(0.0)
+		for _, e := range entropy[i:] {
+			sumb += e.Entropy
+			countb++
+		}
+		avgb, varib := sumb/countb, float32(0.0)
+		for _, e := range entropy[i:] {
+			difference := e.Entropy - avgb
+			varib += difference * difference
+		}
+		varib /= countb
+
+		gain := vari - (varia + varib)
+		if gain > max {
+			index, max = i, gain
+		}
+	}
+	return index
 }
 
 func picture() {
@@ -366,6 +413,8 @@ func main() {
 			sort.Slice(columns[c].Entropy[:], func(i, j int) bool {
 				return columns[c].Entropy[i].Entropy > columns[c].Entropy[j].Entropy
 			})
+			columns[c].Split = split(columns[c].Entropy[:])
+			fmt.Println("split", columns[c].Split)
 			if index < Memory {
 				camera = TypeCameraCenter
 			} else if index < 2*Memory {
@@ -380,11 +429,16 @@ func main() {
 			})
 
 			var history [3]float32
-			for i := range columns {
+			/*for i := range columns {
 				if columns[i].Max < 0 {
 					continue
 				}
 				history[columns[i].Camera] += columns[i].Max
+			}*/
+			for i := range columns {
+				for j := range columns[i].Entropy[:columns[i].Split] {
+					history[columns[i].Entropy[j].Camera] += columns[i].Entropy[j].Entropy
+				}
 			}
 			max, camera = float32(0.0), TypeCameraNone
 			for i, value := range history {
