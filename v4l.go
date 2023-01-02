@@ -11,6 +11,7 @@ import (
 	"math/cmplx"
 	"runtime"
 	"sort"
+	"time"
 
 	"github.com/blackjack/webcam"
 	"github.com/mjibson/go-dsp/fft"
@@ -98,6 +99,7 @@ func (vc *V4LCamera) Start(device string) {
 	defer camera.StopStreaming()
 
 	var cp []byte
+	start, count := time.Now(), 0.0
 	for vc.Stream {
 		err := camera.WaitForFrame(5)
 
@@ -117,6 +119,9 @@ func (vc *V4LCamera) Start(device string) {
 		} else {
 			fmt.Println(device)
 		}
+		count++
+
+		fmt.Println(device, count/float64(time.Since(start).Seconds()))
 
 		if skip < 20 {
 			skip++

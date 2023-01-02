@@ -74,7 +74,7 @@ const (
 	// Memory is the sive of memory per state
 	Memory = 8
 	// NetWidth is the width of the network
-	NetWidth = Width*Height + 4
+	NetWidth = Width*Height + 5
 )
 
 var (
@@ -350,18 +350,31 @@ func main() {
 			columns[i].Net = occam.NewNetwork(NetWidth, 3*Memory)
 			columns[i].Max = 8
 		}
+		current := TypeCameraNone
 		for running {
 			var line [][]float64
 			var camera TypeCamera
 			select {
 			case frame := <-center.Images:
-				camera = TypeCameraCenter
+				if current == TypeCameraCenter {
+					current = TypeCameraNone
+				} else {
+					camera = TypeCameraCenter
+				}
 				line = frame.DCT
 			case frame := <-left.Images:
-				camera = TypeCameraLeft
+				if current == TypeCameraLeft {
+					current = TypeCameraNone
+				} else {
+					camera = TypeCameraLeft
+				}
 				line = frame.DCT
 			case frame := <-right.Images:
-				camera = TypeCameraRight
+				if current == TypeCameraRight {
+					current = TypeCameraNone
+				} else {
+					camera = TypeCameraRight
+				}
 				line = frame.DCT
 			}
 			sort.Slice(columns[:], func(i, j int) bool {
@@ -391,8 +404,9 @@ func main() {
 			net.Point.X[offset+Width*Height] = 0
 			net.Point.X[offset+Width*Height+1] = 0
 			net.Point.X[offset+Width*Height+2] = 0
+			net.Point.X[offset+Width*Height+3] = 0
 			net.Point.X[offset+Width*Height+int(camera)] = 1
-			net.Point.X[offset+Width*Height+3] = float32(math.Sin(2 * time * math.Pi))
+			net.Point.X[offset+Width*Height+4] = float32(math.Sin(2 * time * math.Pi))
 			columns[c].Indexes[camera] = (columns[c].Indexes[camera] + 1) % Memory
 
 			max, index := float32(0.0), 0
@@ -414,7 +428,7 @@ func main() {
 				return columns[c].Entropy[i].Entropy > columns[c].Entropy[j].Entropy
 			})
 			columns[c].Split = split(columns[c].Entropy[:])
-			fmt.Println("split", columns[c].Split)
+
 			if index < Memory {
 				camera = TypeCameraCenter
 			} else if index < 2*Memory {
@@ -428,7 +442,7 @@ func main() {
 				return columns[i].Max > columns[j].Max
 			})
 
-			var history [3]float32
+			var history [4]float32
 			/*for i := range columns {
 				if columns[i].Max < 0 {
 					continue
@@ -447,6 +461,7 @@ func main() {
 					camera = TypeCamera(i)
 				}
 			}
+			current = camera
 			if mode == ModeAuto {
 				switch camera {
 				case TypeCameraCenter:
@@ -461,6 +476,7 @@ func main() {
 					fmt.Println("Right")
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateDown
+				case TypeCameraNone:
 				}
 				update()
 			}

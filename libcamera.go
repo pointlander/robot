@@ -12,6 +12,7 @@ import (
 	"math/cmplx"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/mjibson/go-dsp/fft"
 	"github.com/nfnt/resize"
@@ -61,6 +62,7 @@ func (sc *StreamCamera) Start() {
 		panic(err)
 	}
 
+	start, count := time.Now(), 0.0
 	for sc.Stream {
 		var pkt *reisen.Packet
 		pkt, gotPacket, err := media.ReadPacket()
@@ -94,6 +96,9 @@ func (sc *StreamCamera) Start() {
 			if videoFrame == nil {
 				continue
 			}
+			count++
+
+			fmt.Println("center", count/float64(time.Since(start).Seconds()))
 
 			if skip < 10 {
 				skip++
