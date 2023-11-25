@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"math/cmplx"
 	"runtime"
 	"sort"
 	"time"
+
+	. "github.com/pointlander/robot/matrix"
 
 	"github.com/blackjack/webcam"
 	"github.com/mjibson/go-dsp/fft"
@@ -42,18 +45,23 @@ func (slice FrameSizes) Swap(i, j int) {
 type V4LCamera struct {
 	Stream bool
 	Images chan Frame
+	Seed   int64
+	Net    Net
 }
 
 // NewV4LCamera creates a new v4l camera
-func NewV4LCamera() *V4LCamera {
+func NewV4LCamera(seed int64) *V4LCamera {
 	return &V4LCamera{
 		Stream: true,
 		Images: make(chan Frame, 8),
+		Seed:   seed,
+		Net:    NewNet(seed, Window, Inputs, Outputs),
 	}
 }
 
 // Start starts streaming
 func (vc *V4LCamera) Start(device string) {
+	net := &vc.Net
 	runtime.LockOSThread()
 	skip := 0
 	fmt.Println(device)
@@ -169,10 +177,23 @@ func (vc *V4LCamera) Start(device string) {
 					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
 				}
 			}
+			sum := 0.0
+			input := NewMatrix(0, Inputs, 1)
+			for _, a := range pixels {
+				for _, b := range a {
+					sum += b
+					input.Data = append(input.Data, float32(b))
+				}
+			}
+			length := math.Sqrt(sum)
+			for i := range input.Data {
+				input.Data[i] /= float32(length)
+			}
 			select {
 			case vc.Images <- Frame{
-				Frame: yuyv,
-				DCT:   pixels,
+				Frame:  yuyv,
+				DCT:    pixels,
+				Output: net.Fire(input),
 			}:
 			default:
 				fmt.Println("drop", device)

@@ -96,6 +96,7 @@ type Random struct {
 
 // Net is a net
 type Net struct {
+	Window       int
 	Inputs       int
 	Outputs      int
 	Rng          *rand.Rand
@@ -103,7 +104,7 @@ type Net struct {
 }
 
 // NewNet makes a new network
-func NewNet(seed int64, inputs, outputs int) Net {
+func NewNet(seed int64, window, inputs, outputs int) Net {
 	rng := rand.New(rand.NewSource(seed))
 	distribution := make([][]Random, outputs)
 	for i := range distribution {
@@ -115,6 +116,7 @@ func NewNet(seed int64, inputs, outputs int) Net {
 		}
 	}
 	return Net{
+		Window:       window,
 		Inputs:       inputs,
 		Outputs:      outputs,
 		Rng:          rng,
@@ -176,7 +178,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 			})
 		}
 	}
-	for i := range systems[:Window] {
+	for i := range systems[:n.Window] {
 		for j := range systems[i].Neurons {
 			for k, value := range systems[i].Neurons[j].Data {
 				next[j][k].Mean += value
@@ -185,10 +187,10 @@ func (n *Net) Fire(input Matrix) Matrix {
 	}
 	for i := range next {
 		for j := range next[i] {
-			next[i][j].Mean /= Window
+			next[i][j].Mean /= float32(n.Window)
 		}
 	}
-	for i := range systems[:Window] {
+	for i := range systems[:n.Window] {
 		for j := range systems[i].Neurons {
 			for k, value := range systems[i].Neurons[j].Data {
 				diff := next[j][k].Mean - value
@@ -198,7 +200,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 	}
 	for i := range next {
 		for j := range next[i] {
-			next[i][j].StdDev /= Window
+			next[i][j].StdDev /= float32(n.Window)
 			next[i][j].StdDev = float32(math.Sqrt(float64(next[i][j].StdDev)))
 		}
 	}
@@ -225,8 +227,9 @@ func (j JoystickState) String() string {
 
 // Frame is a video frame
 type Frame struct {
-	Frame image.Image
-	DCT   [][]float64
+	Frame  image.Image
+	DCT    [][]float64
+	Output Matrix
 }
 
 // Entropy is the self entropy of a point
@@ -292,9 +295,9 @@ func split(entropy []Entropy) int {
 }
 
 func picture() {
-	stream := NewStreamCamera()
-	left := NewV4LCamera()
-	right := NewV4LCamera()
+	stream := NewStreamCamera(1)
+	left := NewV4LCamera(2)
+	right := NewV4LCamera(3)
 	go stream.Start()
 	go left.Start("/dev/videol")
 	go right.Start("/dev/videor")
@@ -462,9 +465,9 @@ func main() {
 	go func() {
 		//rnd := rand.New(rand.NewSource(1))
 
-		center := NewStreamCamera()
-		left := NewV4LCamera()
-		right := NewV4LCamera()
+		center := NewStreamCamera(1)
+		left := NewV4LCamera(2)
+		right := NewV4LCamera(3)
 		go center.Start()
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
@@ -476,81 +479,52 @@ func main() {
 			columns[i].Max = 8
 		}
 		//current := TypeCameraNone
-		views := [3][][]float64{}
-		for i := range views {
-			a := make([][]float64, Height)
-			for j := range a {
-				a[j] = make([]float64, Width)
-			}
-			views[i] = a
-		}
-		nets := [3]Net{
-			NewNet(1, Inputs, Outputs),
-			NewNet(2, Inputs, Outputs),
-			NewNet(3, Inputs, Outputs),
-		}
-		out := NewNet(4, 3*Outputs, 3)
+		output := NewMatrix(0, 3*Outputs, 1)
+		output.Data = output.Data[:cap(output.Data)]
+		out := NewNet(4, Window, 3*Outputs, 3)
+		win := NewNet(5, Window, 3*Outputs+3, 3)
+		metaInput := NewMatrix(0, 3*Outputs+3, 1)
+		metaInput.Data = metaInput.Data[:cap(metaInput.Data)]
 		for running {
 			select {
 			case frame := <-center.Images:
-				views[0] = frame.DCT
-				sum := 0.0
-				for _, a := range views[0] {
-					for _, b := range a {
-						sum += b
-					}
-				}
-				length := math.Sqrt(sum)
-				for i := range views[0] {
-					for j := range views[0][i] {
-						views[0][i][j] /= length
-					}
-				}
+				copy(output.Data[:Outputs], frame.Output.Data)
 			case frame := <-left.Images:
-				views[1] = frame.DCT
-				sum := 0.0
-				for _, a := range views[1] {
-					for _, b := range a {
-						sum += b
-					}
-				}
-				length := math.Sqrt(sum)
-				for i := range views[1] {
-					for j := range views[1][i] {
-						views[1][i][j] /= length
-					}
-				}
+				copy(output.Data[Outputs:2*Outputs], frame.Output.Data)
 			case frame := <-right.Images:
-				views[2] = frame.DCT
-				sum := 0.0
-				for _, a := range views[2] {
-					for _, b := range a {
-						sum += b
-					}
-				}
-				length := math.Sqrt(sum)
-				for i := range views[2] {
-					for j := range views[2][i] {
-						views[2][i][j] /= length
-					}
-				}
-			}
-			output := NewMatrix(0, 3*Outputs, 1)
-			for i := range views {
-				input := NewMatrix(0, Inputs, 1)
-				for _, a := range views[i] {
-					for _, b := range a {
-						input.Data = append(input.Data, float32(b))
-					}
-				}
-				a := nets[i].Fire(input)
-				for _, a := range a.Data {
-					output.Data = append(output.Data, a)
-				}
+				copy(output.Data[2*Outputs:3*Outputs], frame.Output.Data)
 			}
 			a := out.Fire(output)
 			fmt.Println("...............................................................................")
 			fmt.Println(a.Data)
+			{
+				copy(metaInput.Data[:3*Outputs], output.Data)
+				copy(metaInput.Data[3*Outputs:], a.Data)
+				w := win.Fire(metaInput)
+				max, index := float32(0.0), 0
+				for i, v := range w.Data {
+					if v > max {
+						max, index = v, i
+					}
+				}
+				switch index {
+				case 0:
+					center.Net.Window = 8
+					left.Net.Window = 8
+					right.Net.Window = 8
+					out.Window = 8
+				case 1:
+					center.Net.Window = 16
+					left.Net.Window = 16
+					right.Net.Window = 16
+					out.Window = 16
+				case 2:
+					center.Net.Window = 32
+					left.Net.Window = 32
+					right.Net.Window = 32
+					out.Window = 32
+				}
+			}
 			max, index := 0.0, 0
 			for i, v := range a.Data {
 				if float64(v) > max {

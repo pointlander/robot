@@ -9,10 +9,13 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"math"
 	"math/cmplx"
 	"os"
 	"os/exec"
 	"time"
+
+	. "github.com/pointlander/robot/matrix"
 
 	"github.com/mjibson/go-dsp/fft"
 	"github.com/nfnt/resize"
@@ -23,18 +26,23 @@ import (
 type StreamCamera struct {
 	Stream bool
 	Images chan Frame
+	Seed   int64
+	Net    Net
 }
 
 // NewStreamCamera creates a new streaming camera
-func NewStreamCamera() *StreamCamera {
+func NewStreamCamera(seed int64) *StreamCamera {
 	return &StreamCamera{
 		Stream: true,
 		Images: make(chan Frame, 8),
+		Seed:   seed,
+		Net:    NewNet(seed, Window, Inputs, Outputs),
 	}
 }
 
 // Start starts streaming
 func (sc *StreamCamera) Start() {
+	net := &sc.Net
 	skip := 0
 	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
 	input, err := command.StdoutPipe()
@@ -132,10 +140,23 @@ func (sc *StreamCamera) Start() {
 					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
 				}
 			}
+			sum := 0.0
+			input := NewMatrix(0, Inputs, 1)
+			for _, a := range pixels {
+				for _, b := range a {
+					sum += b
+					input.Data = append(input.Data, float32(b))
+				}
+			}
+			length := math.Sqrt(sum)
+			for i := range input.Data {
+				input.Data[i] /= float32(length)
+			}
 			select {
 			case sc.Images <- Frame{
-				Frame: videoFrame.Image(),
-				DCT:   pixels,
+				Frame:  videoFrame.Image(),
+				DCT:    pixels,
+				Output: net.Fire(input),
 			}:
 			default:
 				fmt.Println("drop center")
