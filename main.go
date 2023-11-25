@@ -105,9 +105,9 @@ type Net struct {
 // NewNet makes a new network
 func NewNet(seed int64, inputs, outputs int) Net {
 	rng := rand.New(rand.NewSource(seed))
-	distribution := make([][]Random, Outputs)
+	distribution := make([][]Random, outputs)
 	for i := range distribution {
-		for j := 0; j < Inputs; j++ {
+		for j := 0; j < inputs; j++ {
 			distribution[i] = append(distribution[i], Random{
 				Mean:   0,
 				StdDev: 1,
