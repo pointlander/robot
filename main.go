@@ -437,11 +437,9 @@ func main() {
 	update := func() {
 		switch joystickRight {
 		case JoystickStateUp:
-			fmt.Println("right up")
 			in3.SetValue(1)
 			in4.SetValue(0)
 		case JoystickStateDown:
-			fmt.Println("right down")
 			in3.SetValue(0)
 			in4.SetValue(1)
 		default:
@@ -450,11 +448,9 @@ func main() {
 		}
 		switch joystickLeft {
 		case JoystickStateUp:
-			fmt.Println("left up")
 			in1.SetValue(1)
 			in2.SetValue(0)
 		case JoystickStateDown:
-			fmt.Println("left down")
 			in1.SetValue(0)
 			in2.SetValue(1)
 		default:
@@ -564,15 +560,12 @@ func main() {
 			if mode == ModeAuto {
 				switch index {
 				case 0:
-					fmt.Println("Forward")
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateUp
 				case 1:
-					fmt.Println("Left")
 					joystickLeft = JoystickStateDown
 					joystickRight = JoystickStateUp
 				case 2:
-					fmt.Println("Right")
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateDown
 				}
