@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/pointlander/occam"
@@ -96,7 +97,7 @@ type Random struct {
 
 // Net is a net
 type Net struct {
-	Window       int
+	window       int64
 	Inputs       int
 	Outputs      int
 	Rng          *rand.Rand
@@ -104,7 +105,7 @@ type Net struct {
 }
 
 // NewNet makes a new network
-func NewNet(seed int64, window, inputs, outputs int) Net {
+func NewNet(seed int64, window int64, inputs, outputs int) Net {
 	rng := rand.New(rand.NewSource(seed))
 	distribution := make([][]Random, outputs)
 	for i := range distribution {
@@ -116,12 +117,17 @@ func NewNet(seed int64, window, inputs, outputs int) Net {
 		}
 	}
 	return Net{
-		Window:       window,
+		window:       window,
 		Inputs:       inputs,
 		Outputs:      outputs,
 		Rng:          rng,
 		Distribution: distribution,
 	}
+}
+
+// Set window sets the window
+func (n *Net) SetWindow(window int64) {
+	atomic.StoreInt64(&n.window, window)
 }
 
 // Sample is a sample of a random neural network
@@ -133,7 +139,7 @@ type Sample struct {
 
 // Fire runs the network
 func (n *Net) Fire(input Matrix) Matrix {
-	rng, distribution := n.Rng, n.Distribution
+	rng, distribution, window := n.Rng, n.Distribution, atomic.LoadInt64(&n.window)
 	output := NewMatrix(0, n.Outputs, Samples)
 
 	systems := make([]Sample, 0, 8)
@@ -178,7 +184,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 			})
 		}
 	}
-	for i := range systems[:n.Window] {
+	for i := range systems[:window] {
 		for j := range systems[i].Neurons {
 			for k, value := range systems[i].Neurons[j].Data {
 				next[j][k].Mean += value
@@ -187,10 +193,10 @@ func (n *Net) Fire(input Matrix) Matrix {
 	}
 	for i := range next {
 		for j := range next[i] {
-			next[i][j].Mean /= float32(n.Window)
+			next[i][j].Mean /= float32(window)
 		}
 	}
-	for i := range systems[:n.Window] {
+	for i := range systems[:window] {
 		for j := range systems[i].Neurons {
 			for k, value := range systems[i].Neurons[j].Data {
 				diff := next[j][k].Mean - value
@@ -200,7 +206,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 	}
 	for i := range next {
 		for j := range next[i] {
-			next[i][j].StdDev /= float32(n.Window)
+			next[i][j].StdDev /= float32(window)
 			next[i][j].StdDev = float32(math.Sqrt(float64(next[i][j].StdDev)))
 		}
 	}
@@ -509,20 +515,20 @@ func main() {
 				}
 				switch index {
 				case 0:
-					center.Net.Window = 8
-					left.Net.Window = 8
-					right.Net.Window = 8
-					out.Window = 8
+					center.Net.SetWindow(8)
+					left.Net.SetWindow(8)
+					right.Net.SetWindow(8)
+					out.SetWindow(8)
 				case 1:
-					center.Net.Window = 16
-					left.Net.Window = 16
-					right.Net.Window = 16
-					out.Window = 16
+					center.Net.SetWindow(16)
+					left.Net.SetWindow(16)
+					right.Net.SetWindow(16)
+					out.SetWindow(16)
 				case 2:
-					center.Net.Window = 32
-					left.Net.Window = 32
-					right.Net.Window = 32
-					out.Window = 32
+					center.Net.SetWindow(32)
+					left.Net.SetWindow(32)
+					right.Net.SetWindow(32)
+					out.SetWindow(32)
 				}
 			}
 			max, index := 0.0, 0
