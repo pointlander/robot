@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pointlander/gradient/tf32"
 	"github.com/pointlander/occam"
 	. "github.com/pointlander/robot/matrix"
 
@@ -80,13 +79,13 @@ const (
 
 const (
 	// Window is the window size
-	Window = 8
+	Window = 32
 	// Samples is the number of samples
 	Samples = 256
 	// Inputs is the number of inputs
 	Inputs = Width * Height
 	// Outputs is the number of outputs
-	Outputs = 8
+	Outputs = 32
 )
 
 // Random is a random variable
@@ -133,14 +132,14 @@ type Sample struct {
 // Fire runs the network
 func (n *Net) Fire(input Matrix) Matrix {
 	rng, distribution := n.Rng, n.Distribution
-	output := NewMatrix(0, Outputs, Samples)
+	output := NewMatrix(0, n.Outputs, Samples)
 
 	systems := make([]Sample, 0, 8)
 	for i := 0; i < Samples; i++ {
-		neurons := make([]Matrix, Outputs)
+		neurons := make([]Matrix, n.Outputs)
 		for j := range neurons {
-			neurons[j] = NewMatrix(0, Inputs, 1)
-			for k := 0; k < Inputs; k++ {
+			neurons[j] = NewMatrix(0, n.Inputs, 1)
+			for k := 0; k < n.Inputs; k++ {
 				v := float32(rng.NormFloat64())*distribution[j][k].StdDev + distribution[j][k].Mean
 				if v > 0 {
 					v = 1
@@ -150,7 +149,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 				neurons[j].Data = append(neurons[j].Data, v)
 			}
 		}
-		outputs := NewMatrix(0, Outputs, 1)
+		outputs := NewMatrix(0, n.Outputs, 1)
 		for j := range neurons {
 			out := MulT(neurons[j], input)
 			output.Data = append(output.Data, out.Data[0])
@@ -168,9 +167,9 @@ func (n *Net) Fire(input Matrix) Matrix {
 	sort.Slice(entropies, func(i, j int) bool {
 		return systems[i].Entropy < systems[j].Entropy
 	})
-	next := make([][]Random, Outputs)
+	next := make([][]Random, n.Outputs)
 	for i := range next {
-		for j := 0; j < Inputs; j++ {
+		for j := 0; j < n.Inputs; j++ {
 			next[i] = append(next[i], Random{
 				Mean:   0,
 				StdDev: 0,
@@ -465,7 +464,7 @@ func main() {
 	}
 
 	go func() {
-		rnd := rand.New(rand.NewSource(1))
+		//rnd := rand.New(rand.NewSource(1))
 
 		center := NewStreamCamera()
 		left := NewV4LCamera()
@@ -474,15 +473,113 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		var time float64
+		//var time float64
 		columns := [8]Column{}
 		for i := range columns {
 			columns[i].Net = occam.NewNetwork(NetWidth, 3*Memory)
 			columns[i].Max = 8
 		}
-		current := TypeCameraNone
+		//current := TypeCameraNone
+		views := [3][][]float64{}
+		for i := range views {
+			a := make([][]float64, Height)
+			for j := range a {
+				a[j] = make([]float64, Width)
+			}
+			views[i] = a
+		}
+		nets := [3]Net{
+			NewNet(1, Inputs, Outputs),
+			NewNet(2, Inputs, Outputs),
+			NewNet(3, Inputs, Outputs),
+		}
+		out := NewNet(4, 3*Outputs, 3)
 		for running {
-			var line [][]float64
+			select {
+			case frame := <-center.Images:
+				views[0] = frame.DCT
+				sum := 0.0
+				for _, a := range views[0] {
+					for _, b := range a {
+						sum += b
+					}
+				}
+				length := math.Sqrt(sum)
+				for i := range views[0] {
+					for j := range views[0][i] {
+						views[0][i][j] /= length
+					}
+				}
+			case frame := <-left.Images:
+				views[1] = frame.DCT
+				sum := 0.0
+				for _, a := range views[1] {
+					for _, b := range a {
+						sum += b
+					}
+				}
+				length := math.Sqrt(sum)
+				for i := range views[1] {
+					for j := range views[1][i] {
+						views[1][i][j] /= length
+					}
+				}
+			case frame := <-right.Images:
+				views[2] = frame.DCT
+				sum := 0.0
+				for _, a := range views[2] {
+					for _, b := range a {
+						sum += b
+					}
+				}
+				length := math.Sqrt(sum)
+				for i := range views[2] {
+					for j := range views[2][i] {
+						views[2][i][j] /= length
+					}
+				}
+			}
+			output := NewMatrix(0, 3*Outputs, 1)
+			for i := range views {
+				input := NewMatrix(0, Inputs, 1)
+				for _, a := range views[i] {
+					for _, b := range a {
+						input.Data = append(input.Data, float32(b))
+					}
+				}
+				a := nets[i].Fire(input)
+				for _, a := range a.Data {
+					output.Data = append(output.Data, a)
+				}
+			}
+			a := out.Fire(output)
+			fmt.Println("...............................................................................")
+			fmt.Println(a.Data)
+			max, index := 0.0, 0
+			for i, v := range a.Data {
+				if float64(v) > max {
+					max, index = float64(v), i
+				}
+			}
+			if mode == ModeAuto {
+				switch index {
+				case 0:
+					fmt.Println("Forward")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateUp
+				case 1:
+					fmt.Println("Left")
+					joystickLeft = JoystickStateDown
+					joystickRight = JoystickStateUp
+				case 2:
+					fmt.Println("Right")
+					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateDown
+				}
+				update()
+			}
+
+			/*var line [][]float64
 			var camera TypeCamera
 			select {
 			case frame := <-center.Images:
@@ -572,14 +669,14 @@ func main() {
 				return columns[i].Max > columns[j].Max
 			})
 
-			var history [4]float32
+			var history [4]float32*/
 			/*for i := range columns {
 				if columns[i].Max < 0 {
 					continue
 				}
 				history[columns[i].Camera] += columns[i].Max
 			}*/
-			for i := range columns {
+			/*for i := range columns {
 				for j := range columns[i].Entropy[:columns[i].Split] {
 					history[columns[i].Entropy[j].Camera] += columns[i].Entropy[j].Entropy
 				}
@@ -610,7 +707,7 @@ func main() {
 				}
 				update()
 			}
-			time += 1 / 256.0
+			time += 1 / 256.0*/
 		}
 	}()
 
