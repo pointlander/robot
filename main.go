@@ -537,6 +537,9 @@ func main() {
 					max, index = float64(v), i
 				}
 			}
+			atomic.StoreInt64(&center.Feedback, int64(index))
+			atomic.StoreInt64(&left.Feedback, int64(index))
+			atomic.StoreInt64(&right.Feedback, int64(index))
 			if mode == ModeAuto {
 				switch index {
 				case 0:

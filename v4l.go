@@ -12,6 +12,7 @@ import (
 	"math/cmplx"
 	"runtime"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	. "github.com/pointlander/robot/matrix"
@@ -43,10 +44,11 @@ func (slice FrameSizes) Swap(i, j int) {
 
 // V4LCamera is a camera that is from a v4l device
 type V4LCamera struct {
-	Stream bool
-	Images chan Frame
-	Seed   int64
-	Net    Net
+	Stream   bool
+	Images   chan Frame
+	Seed     int64
+	Net      Net
+	Feedback int64
 }
 
 // NewV4LCamera creates a new v4l camera
@@ -55,7 +57,7 @@ func NewV4LCamera(seed int64) *V4LCamera {
 		Stream: true,
 		Images: make(chan Frame, 8),
 		Seed:   seed,
-		Net:    NewNet(seed, Window, Inputs, Outputs),
+		Net:    NewNet(seed, Window, Inputs+3, Outputs),
 	}
 }
 
@@ -178,7 +180,7 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}
 			sum := 0.0
-			input := NewMatrix(0, Inputs, 1)
+			input := NewMatrix(0, Inputs+3, 1)
 			for _, a := range pixels {
 				for _, b := range a {
 					sum += b
@@ -186,9 +188,12 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}
 			length := math.Sqrt(sum)
-			for i := range input.Data {
+			for i := range input.Data[:Inputs] {
 				input.Data[i] /= float32(length)
 			}
+			feedback := make([]float32, 3)
+			feedback[atomic.LoadInt64(&vc.Feedback)] = 1
+			input.Data = append(input.Data, feedback...)
 			select {
 			case vc.Images <- Frame{
 				Frame:  yuyv,

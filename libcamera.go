@@ -13,6 +13,7 @@ import (
 	"math/cmplx"
 	"os"
 	"os/exec"
+	"sync/atomic"
 	"time"
 
 	. "github.com/pointlander/robot/matrix"
@@ -24,10 +25,11 @@ import (
 
 // StreamCamera is a camera that is from a stream
 type StreamCamera struct {
-	Stream bool
-	Images chan Frame
-	Seed   int64
-	Net    Net
+	Stream   bool
+	Images   chan Frame
+	Seed     int64
+	Net      Net
+	Feedback int64
 }
 
 // NewStreamCamera creates a new streaming camera
@@ -36,7 +38,7 @@ func NewStreamCamera(seed int64) *StreamCamera {
 		Stream: true,
 		Images: make(chan Frame, 8),
 		Seed:   seed,
-		Net:    NewNet(seed, Window, Inputs, Outputs),
+		Net:    NewNet(seed, Window, Inputs+3, Outputs),
 	}
 }
 
@@ -141,7 +143,7 @@ func (sc *StreamCamera) Start() {
 				}
 			}
 			sum := 0.0
-			input := NewMatrix(0, Inputs, 1)
+			input := NewMatrix(0, Inputs+3, 1)
 			for _, a := range pixels {
 				for _, b := range a {
 					sum += b
@@ -149,9 +151,12 @@ func (sc *StreamCamera) Start() {
 				}
 			}
 			length := math.Sqrt(sum)
-			for i := range input.Data {
+			for i := range input.Data[:Inputs] {
 				input.Data[i] /= float32(length)
 			}
+			feedback := make([]float32, 3)
+			feedback[atomic.LoadInt64(&sc.Feedback)] = 1
+			input.Data = append(input.Data, feedback...)
 			select {
 			case sc.Images <- Frame{
 				Frame:  videoFrame.Image(),
