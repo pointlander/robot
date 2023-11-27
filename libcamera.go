@@ -10,14 +10,12 @@ import (
 	"image/color"
 	"io"
 	"math"
-	"math/cmplx"
 	"os"
 	"os/exec"
 	"time"
 
 	. "github.com/pointlander/robot/matrix"
 
-	"github.com/mjibson/go-dsp/fft"
 	"github.com/nfnt/resize"
 	"github.com/zergon321/reisen"
 )
@@ -134,12 +132,12 @@ func (sc *StreamCamera) Start() {
 				}
 				pixels[j] = pix
 			}
-			output := fft.FFT2Real(pixels)
+			/*output := fft.FFT2Real(pixels)
 			for j, pix := range pixels {
 				for i := range pix {
 					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
 				}
-			}
+			}*/
 			sum := 0.0
 			input := NewMatrix(0, Inputs, 1)
 			for _, a := range pixels {
