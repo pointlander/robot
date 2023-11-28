@@ -13,7 +13,7 @@ import (
 	"sort"
 	"time"
 
-	. "github.com/pointlander/robot/matrix"
+	. "github.com/pointlander/matrix"
 
 	"github.com/blackjack/webcam"
 	"github.com/nfnt/resize"

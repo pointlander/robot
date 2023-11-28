@@ -14,7 +14,7 @@ import (
 	"os/exec"
 	"time"
 
-	. "github.com/pointlander/robot/matrix"
+	. "github.com/pointlander/matrix"
 
 	"github.com/nfnt/resize"
 	"github.com/zergon321/reisen"

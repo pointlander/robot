@@ -19,8 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pointlander/occam"
-	. "github.com/pointlander/robot/matrix"
+	. "github.com/pointlander/matrix"
 
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/warthog618/gpiod"
@@ -238,68 +237,6 @@ type Frame struct {
 	Output Matrix
 }
 
-// Entropy is the self entropy of a point
-type Entropy struct {
-	Entropy float32
-	Camera  TypeCamera
-}
-
-// Column is like a brain column
-type Column struct {
-	Net     *occam.Network
-	Max     float32
-	Camera  TypeCamera
-	Indexes [States]int
-	Entropy [3 * Memory]Entropy
-	Split   int
-}
-
-func split(entropy []Entropy) int {
-	sum := float32(0.0)
-	for _, e := range entropy {
-		sum += e.Entropy
-	}
-	avg, vari := sum/float32(len(entropy)), float32(0.0)
-	for _, e := range entropy {
-		difference := e.Entropy - avg
-		vari += difference * difference
-	}
-	vari /= float32(len(entropy))
-
-	index, max := 0, float32(0.0)
-	for i := 1; i < len(entropy); i++ {
-		suma, counta := float32(0.0), float32(0.0)
-		for _, e := range entropy[:i] {
-			suma += e.Entropy
-			counta++
-		}
-		avga, varia := suma/counta, float32(0.0)
-		for _, e := range entropy[:i] {
-			difference := e.Entropy - avga
-			varia += difference * difference
-		}
-		varia /= counta
-
-		sumb, countb := float32(0.0), float32(0.0)
-		for _, e := range entropy[i:] {
-			sumb += e.Entropy
-			countb++
-		}
-		avgb, varib := sumb/countb, float32(0.0)
-		for _, e := range entropy[i:] {
-			difference := e.Entropy - avgb
-			varib += difference * difference
-		}
-		varib /= countb
-
-		gain := vari - (varia + varib)
-		if gain > max {
-			index, max = i, gain
-		}
-	}
-	return index
-}
-
 func picture() {
 	stream := NewStreamCamera(1)
 	left := NewV4LCamera(2)
@@ -469,8 +406,6 @@ func main() {
 	}
 
 	go func() {
-		//rnd := rand.New(rand.NewSource(1))
-
 		center := NewStreamCamera(1)
 		left := NewV4LCamera(2)
 		right := NewV4LCamera(3)
@@ -478,13 +413,6 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		//var time float64
-		columns := [8]Column{}
-		for i := range columns {
-			columns[i].Net = occam.NewNetwork(NetWidth, 3*Memory)
-			columns[i].Max = 8
-		}
-		//current := TypeCameraNone
 		output := NewMatrix(0, 3*Outputs, 1)
 		output.Data = output.Data[:cap(output.Data)]
 		out := NewNet(4, Window, 3*Outputs, 3)
@@ -554,136 +482,6 @@ func main() {
 				}
 				update()
 			}
-
-			/*var line [][]float64
-			var camera TypeCamera
-			select {
-			case frame := <-center.Images:
-				if current == TypeCameraCenter {
-					current = TypeCameraNone
-				} else {
-					camera = TypeCameraCenter
-				}
-				line = frame.DCT
-			case frame := <-left.Images:
-				if current == TypeCameraLeft {
-					current = TypeCameraNone
-				} else {
-					camera = TypeCameraLeft
-				}
-				line = frame.DCT
-			case frame := <-right.Images:
-				if current == TypeCameraRight {
-					current = TypeCameraNone
-				} else {
-					camera = TypeCameraRight
-				}
-				line = frame.DCT
-			}
-			sort.Slice(columns[:], func(i, j int) bool {
-				return columns[i].Max > columns[j].Max
-			})
-			total := float32(0.0)
-			for i := range columns {
-				total += columns[i].Max
-			}
-			c, b := 0, rnd.Float32()
-			bin := float32(0.0)
-			for i := range columns {
-				bin += columns[i].Max / total
-				if b < bin {
-					c = i
-					break
-				}
-			}
-			net := columns[c].Net
-			offset, i := Memory*int(camera)*NetWidth+columns[c].Indexes[camera]*NetWidth, 0
-			for y := 0; y < Height; y++ {
-				for x := 0; x < Width; x++ {
-					net.Point.X[offset+i] = float32(line[y][x])
-					i++
-				}
-			}
-			net.Point.X[offset+Width*Height] = 0
-			net.Point.X[offset+Width*Height+1] = 0
-			net.Point.X[offset+Width*Height+2] = 0
-			net.Point.X[offset+Width*Height+3] = 0
-			net.Point.X[offset+Width*Height+int(camera)] = 1
-			net.Point.X[offset+Width*Height+4] = float32(math.Sin(2 * time * math.Pi))
-			columns[c].Indexes[camera] = (columns[c].Indexes[camera] + 1) % Memory
-
-			max, index := float32(0.0), 0
-			for i := 0; i < 3*Memory; i++ {
-				for i, value := range net.Point.X[i*NetWidth : (i+1)*NetWidth] {
-					net.Input.X[i] = float32(value)
-				}
-				net.Cost(func(a *tf32.V) bool {
-					columns[c].Entropy[i].Entropy = float32(a.X[0])
-					columns[c].Entropy[i].Camera = TypeCamera(i / Memory)
-					if a.X[0] > max {
-						max = a.X[0]
-						index = i
-					}
-					return true
-				})
-			}
-			sort.Slice(columns[c].Entropy[:], func(i, j int) bool {
-				return columns[c].Entropy[i].Entropy > columns[c].Entropy[j].Entropy
-			})
-			columns[c].Split = split(columns[c].Entropy[:])
-
-			if index < Memory {
-				camera = TypeCameraCenter
-			} else if index < 2*Memory {
-				camera = TypeCameraLeft
-			} else {
-				camera = TypeCameraRight
-			}
-			columns[c].Max = max
-			columns[c].Camera = camera
-			sort.Slice(columns[:], func(i, j int) bool {
-				return columns[i].Max > columns[j].Max
-			})
-
-			var history [4]float32*/
-			/*for i := range columns {
-				if columns[i].Max < 0 {
-					continue
-				}
-				history[columns[i].Camera] += columns[i].Max
-			}*/
-			/*for i := range columns {
-				for j := range columns[i].Entropy[:columns[i].Split] {
-					history[columns[i].Entropy[j].Camera] += columns[i].Entropy[j].Entropy
-				}
-			}
-			max, camera = float32(0.0), TypeCameraNone
-			for i, value := range history {
-				if value > max {
-					max = value
-					camera = TypeCamera(i)
-				}
-			}
-			current = camera
-			if mode == ModeAuto {
-				switch camera {
-				case TypeCameraCenter:
-					fmt.Println("Forward")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateUp
-				case TypeCameraLeft:
-					fmt.Println("Left")
-					joystickLeft = JoystickStateDown
-					joystickRight = JoystickStateUp
-				case TypeCameraRight:
-					fmt.Println("Right")
-					joystickLeft = JoystickStateUp
-					joystickRight = JoystickStateDown
-				case TypeCameraNone:
-				}
-				update()
-			}
-			time += 1 / 256.0*/
 		}
 	}()
 
