@@ -49,7 +49,7 @@ type V4LCamera struct {
 
 // NewV4LCamera creates a new v4l camera
 func NewV4LCamera(seed int64) *V4LCamera {
-	nets := make([]Net, 16)
+	nets := make([]Net, Nets)
 	for n := range nets {
 		nets[n] = NewNet(seed+1+int64(n), Window, 256, 8)
 	}
@@ -57,7 +57,7 @@ func NewV4LCamera(seed int64) *V4LCamera {
 		Stream: true,
 		Images: make(chan Frame, 8),
 		Seed:   seed,
-		Net:    NewNet(seed, Window, 128, Outputs),
+		Net:    NewNet(seed, Window, Nets*8, Outputs),
 		Nets:   nets,
 	}
 }
@@ -66,6 +66,8 @@ func NewV4LCamera(seed int64) *V4LCamera {
 func (vc *V4LCamera) Start(device string) {
 	net := &vc.Net
 	nets := &vc.Nets
+	//var coords [][]Coord
+
 	runtime.LockOSThread()
 	skip := 0
 	fmt.Println(device)
@@ -169,10 +171,22 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}
 			width, height := b.Max.X, b.Max.Y
+			/*if coords == nil {
+				rng := rand.New(rand.NewSource(vc.Seed + int64(len(*nets))))
+				coords = make([][]Coord, len(*nets))
+				for c := range coords {
+					coords[c] = make([]Coord, 256)
+					for x := 0; x < 256; x++ {
+						coords[c][x].X = rng.Intn(width)
+						coords[c][x].Y = rng.Intn(height)
+					}
+				}
+			}*/
 			for n := range *nets {
 				input, sum := NewMatrix(0, 256, 1), 0.0
 				for x := 0; x < 256; x++ {
-					pixel := gray.GrayAt((*nets)[n].Rng.Intn(width), (*nets)[n].Rng.Intn(height))
+					pixel := gray.GrayAt((*nets)[n].Rng.Intn(width/4)+(width/4)*(n%4),
+						(*nets)[n].Rng.Intn(height/4)+(height/4)*(n/4))
 					input.Data = append(input.Data, float32(pixel.Y))
 					sum += float64(pixel.Y) * float64(pixel.Y)
 				}
@@ -209,7 +223,7 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}*/
 			sum := 0.0
-			input := NewMatrix(0, 128, 1)
+			input := NewMatrix(0, Nets*8, 1)
 			for _, a := range outputs {
 				for _, b := range a.Data {
 					sum += float64(b) * float64(b)
