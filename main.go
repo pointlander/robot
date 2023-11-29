@@ -450,20 +450,47 @@ func main() {
 				switch index {
 				case 0:
 					center.Net.SetWindow(8)
+					for n := range center.Nets {
+						center.Nets[n].SetWindow(8)
+					}
 					left.Net.SetWindow(8)
+					for n := range left.Nets {
+						left.Nets[n].SetWindow(8)
+					}
 					right.Net.SetWindow(8)
+					for n := range right.Nets {
+						right.Nets[n].SetWindow(8)
+					}
 					out.SetWindow(8)
 					win.SetWindow(16)
 				case 1:
 					center.Net.SetWindow(16)
+					for n := range center.Nets {
+						center.Nets[n].SetWindow(16)
+					}
 					left.Net.SetWindow(16)
+					for n := range left.Nets {
+						left.Nets[n].SetWindow(16)
+					}
 					right.Net.SetWindow(16)
+					for n := range right.Nets {
+						right.Nets[n].SetWindow(16)
+					}
 					out.SetWindow(16)
 					win.SetWindow(16)
 				case 2:
 					center.Net.SetWindow(32)
+					for n := range center.Nets {
+						center.Nets[n].SetWindow(32)
+					}
 					left.Net.SetWindow(32)
+					for n := range left.Nets {
+						left.Nets[n].SetWindow(32)
+					}
 					right.Net.SetWindow(32)
+					for n := range right.Nets {
+						right.Nets[n].SetWindow(32)
+					}
 					out.SetWindow(32)
 					win.SetWindow(32)
 				}
