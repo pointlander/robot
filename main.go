@@ -415,17 +415,23 @@ func main() {
 
 		output := NewMatrix(0, 3*Outputs, 1)
 		output.Data = output.Data[:cap(output.Data)]
-		out := NewNet(4, Window, 3*Outputs, 3)
-		win := NewNet(5, Window, 3*Outputs+3, 3)
-		metaInput := NewMatrix(0, 3*Outputs+3, 1)
+		out := NewNet(4, Window, 3*Outputs, 5)
+		win := NewNet(5, Window, 3*Outputs+5, 3)
+		metaInput := NewMatrix(0, 3*Outputs+5, 1)
 		metaInput.Data = metaInput.Data[:cap(metaInput.Data)]
 		for running {
 			select {
 			case frame := <-center.Images:
+				fmt.Println("center", frame.Frame.Bounds())
+				// 640,480
 				copy(output.Data[:Outputs], frame.Output.Data)
 			case frame := <-left.Images:
+				fmt.Println("left", frame.Frame.Bounds())
+				// 320,240
 				copy(output.Data[Outputs:2*Outputs], frame.Output.Data)
 			case frame := <-right.Images:
+				fmt.Println("right", frame.Frame.Bounds())
+				// 320,240
 				copy(output.Data[2*Outputs:3*Outputs], frame.Output.Data)
 			}
 			a := out.Fire(output)
@@ -478,6 +484,12 @@ func main() {
 					joystickRight = JoystickStateUp
 				case 2:
 					joystickLeft = JoystickStateUp
+					joystickRight = JoystickStateDown
+				case 3:
+					joystickLeft = JoystickStateNone
+					joystickRight = JoystickStateNone
+				case 4:
+					joystickLeft = JoystickStateDown
 					joystickRight = JoystickStateDown
 				}
 				update()

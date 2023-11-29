@@ -16,7 +16,6 @@ import (
 
 	. "github.com/pointlander/matrix"
 
-	"github.com/nfnt/resize"
 	"github.com/zergon321/reisen"
 )
 
@@ -34,13 +33,23 @@ func NewStreamCamera(seed int64) *StreamCamera {
 		Stream: true,
 		Images: make(chan Frame, 8),
 		Seed:   seed,
-		Net:    NewNet(seed, Window, Inputs, Outputs),
+		Net:    NewNet(seed, Window, 64, Outputs),
 	}
 }
 
 // Start starts streaming
 func (sc *StreamCamera) Start() {
 	net := &sc.Net
+	nets := []Net{
+		NewNet(sc.Seed+1, Window, 256, 8),
+		NewNet(sc.Seed+2, Window, 256, 8),
+		NewNet(sc.Seed+3, Window, 256, 8),
+		NewNet(sc.Seed+4, Window, 256, 8),
+		NewNet(sc.Seed+5, Window, 256, 8),
+		NewNet(sc.Seed+6, Window, 256, 8),
+		NewNet(sc.Seed+7, Window, 256, 8),
+		NewNet(sc.Seed+8, Window, 256, 8),
+	}
 	skip := 0
 	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
 	input, err := command.StdoutPipe()
@@ -113,7 +122,33 @@ func (sc *StreamCamera) Start() {
 				continue
 			}
 
-			tiny := resize.Resize(Width, Height, videoFrame.Image(), resize.Lanczos3)
+			outputs := []Matrix{}
+			img := videoFrame.Image()
+			b := img.Bounds()
+			gray := image.NewGray(b)
+			for y := 0; y < b.Max.Y; y++ {
+				for x := 0; x < b.Max.X; x++ {
+					original := img.At(x, y)
+					pixel := color.GrayModel.Convert(original)
+					gray.Set(x, y, pixel)
+				}
+			}
+			width, height := b.Max.X, b.Max.Y
+			for n := range nets {
+				input, sum := NewMatrix(0, 256, 1), 0.0
+				for x := 0; x < 256; x++ {
+					pixel := gray.GrayAt(nets[n].Rng.Intn(width), nets[n].Rng.Intn(height))
+					input.Data = append(input.Data, float32(pixel.Y))
+					sum += float64(pixel.Y) * float64(pixel.Y)
+				}
+				length := math.Sqrt(sum)
+				for x := range input.Data {
+					input.Data[x] /= float32(length)
+				}
+				outputs = append(outputs, nets[n].Fire(input))
+			}
+
+			/*tiny := resize.Resize(Width, Height, videoFrame.Image(), resize.Lanczos3)
 			b := tiny.Bounds()
 			gray := image.NewGray(b)
 			for y := 0; y < b.Max.Y; y++ {
@@ -131,7 +166,7 @@ func (sc *StreamCamera) Start() {
 					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
 				}
 				pixels[j] = pix
-			}
+			}*/
 			/*output := fft.FFT2Real(pixels)
 			for j, pix := range pixels {
 				for i := range pix {
@@ -139,11 +174,11 @@ func (sc *StreamCamera) Start() {
 				}
 			}*/
 			sum := 0.0
-			input := NewMatrix(0, Inputs, 1)
-			for _, a := range pixels {
-				for _, b := range a {
-					sum += b
-					input.Data = append(input.Data, float32(b))
+			input := NewMatrix(0, 64, 1)
+			for _, a := range outputs {
+				for _, b := range a.Data {
+					sum += float64(b) * float64(b)
+					input.Data = append(input.Data, b)
 				}
 			}
 			length := math.Sqrt(sum)
@@ -152,8 +187,8 @@ func (sc *StreamCamera) Start() {
 			}
 			select {
 			case sc.Images <- Frame{
-				Frame:  videoFrame.Image(),
-				DCT:    pixels,
+				Frame: videoFrame.Image(),
+				//DCT:    pixels,
 				Output: net.Fire(input),
 			}:
 			default:

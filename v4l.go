@@ -16,7 +16,6 @@ import (
 	. "github.com/pointlander/matrix"
 
 	"github.com/blackjack/webcam"
-	"github.com/nfnt/resize"
 )
 
 // FrameSizes is a slice of FrameSize
@@ -53,13 +52,23 @@ func NewV4LCamera(seed int64) *V4LCamera {
 		Stream: true,
 		Images: make(chan Frame, 8),
 		Seed:   seed,
-		Net:    NewNet(seed, Window, Inputs, Outputs),
+		Net:    NewNet(seed, Window, 64, Outputs),
 	}
 }
 
 // Start starts streaming
 func (vc *V4LCamera) Start(device string) {
 	net := &vc.Net
+	nets := []Net{
+		NewNet(vc.Seed+1, Window, 256, 8),
+		NewNet(vc.Seed+2, Window, 256, 8),
+		NewNet(vc.Seed+3, Window, 256, 8),
+		NewNet(vc.Seed+4, Window, 256, 8),
+		NewNet(vc.Seed+5, Window, 256, 8),
+		NewNet(vc.Seed+6, Window, 256, 8),
+		NewNet(vc.Seed+7, Window, 256, 8),
+		NewNet(vc.Seed+8, Window, 256, 8),
+	}
 	runtime.LockOSThread()
 	skip := 0
 	fmt.Println(device)
@@ -150,7 +159,34 @@ func (vc *V4LCamera) Start(device string) {
 				yuyv.Cr[i] = cp[ii+3]
 
 			}
-			tiny := resize.Resize(Width, Height, yuyv, resize.Lanczos3)
+
+			outputs := []Matrix{}
+			img := yuyv
+			b := img.Bounds()
+			gray := image.NewGray(b)
+			for y := 0; y < b.Max.Y; y++ {
+				for x := 0; x < b.Max.X; x++ {
+					original := img.At(x, y)
+					pixel := color.GrayModel.Convert(original)
+					gray.Set(x, y, pixel)
+				}
+			}
+			width, height := b.Max.X, b.Max.Y
+			for n := range nets {
+				input, sum := NewMatrix(0, 256, 1), 0.0
+				for x := 0; x < 256; x++ {
+					pixel := gray.GrayAt(nets[n].Rng.Intn(width), nets[n].Rng.Intn(height))
+					input.Data = append(input.Data, float32(pixel.Y))
+					sum += float64(pixel.Y) * float64(pixel.Y)
+				}
+				length := math.Sqrt(sum)
+				for x := range input.Data {
+					input.Data[x] /= float32(length)
+				}
+				outputs = append(outputs, nets[n].Fire(input))
+			}
+
+			/*tiny := resize.Resize(Width, Height, yuyv, resize.Lanczos3)
 			b := tiny.Bounds()
 			gray := image.NewGray(b)
 			for y := 0; y < b.Max.Y; y++ {
@@ -168,7 +204,7 @@ func (vc *V4LCamera) Start(device string) {
 					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
 				}
 				pixels[j] = pix
-			}
+			}*/
 			/*output := fft.FFT2Real(pixels)
 			for j, pix := range pixels {
 				for i := range pix {
@@ -176,11 +212,11 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}*/
 			sum := 0.0
-			input := NewMatrix(0, Inputs, 1)
-			for _, a := range pixels {
-				for _, b := range a {
-					sum += b
-					input.Data = append(input.Data, float32(b))
+			input := NewMatrix(0, 64, 1)
+			for _, a := range outputs {
+				for _, b := range a.Data {
+					sum += float64(b) * float64(b)
+					input.Data = append(input.Data, b)
 				}
 			}
 			length := math.Sqrt(sum)
@@ -189,8 +225,8 @@ func (vc *V4LCamera) Start(device string) {
 			}
 			select {
 			case vc.Images <- Frame{
-				Frame:  yuyv,
-				DCT:    pixels,
+				Frame: yuyv,
+				//DCT:    pixels,
 				Output: net.Fire(input),
 			}:
 			default:
