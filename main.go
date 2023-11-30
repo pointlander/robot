@@ -79,7 +79,7 @@ const (
 
 const (
 	// Window is the window size
-	Window = 32
+	Window = 64
 	// Samples is the number of samples
 	Samples = 256
 	// Inputs is the number of inputs
@@ -421,9 +421,9 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		output := NewMatrix(0, 3*Outputs, 1)
+		output := NewMatrix(0, 3*Outputs+5, 1)
 		output.Data = output.Data[:cap(output.Data)]
-		out := NewNet(4, Window, 3*Outputs, 5)
+		out := NewNet(4, Window, 3*Outputs+5, 5)
 		win := NewNet(5, Window, 3*Outputs+5, 3)
 		metaInput := NewMatrix(0, 3*Outputs+5, 1)
 		metaInput.Data = metaInput.Data[:cap(metaInput.Data)]
@@ -443,6 +443,8 @@ func main() {
 				copy(output.Data[2*Outputs:3*Outputs], frame.Output.Data)
 			}
 			a := out.Fire(output)
+			a = Normalize(a)
+			copy(output.Data[3*Outputs:], a.Data)
 			fmt.Println("...............................................................................")
 			fmt.Println(a.Data)
 			{
@@ -457,50 +459,50 @@ func main() {
 				}
 				switch index {
 				case 0:
-					center.Net.SetWindow(8)
+					//center.Net.SetWindow(8)
 					/*for n := range center.Nets {
 						center.Nets[n].SetWindow(8)
 					}*/
-					left.Net.SetWindow(8)
+					//left.Net.SetWindow(8)
 					/*for n := range left.Nets {
 						left.Nets[n].SetWindow(8)
 					}*/
-					right.Net.SetWindow(8)
+					//right.Net.SetWindow(8)
 					/*for n := range right.Nets {
 						right.Nets[n].SetWindow(8)
 					}*/
-					out.SetWindow(8)
-					win.SetWindow(16)
+					//out.SetWindow(8)
+					//win.SetWindow(16)
 				case 1:
-					center.Net.SetWindow(16)
+					//center.Net.SetWindow(16)
 					/*for n := range center.Nets {
 						center.Nets[n].SetWindow(16)
 					}*/
-					left.Net.SetWindow(16)
+					//left.Net.SetWindow(16)
 					/*for n := range left.Nets {
 						left.Nets[n].SetWindow(16)
 					}*/
-					right.Net.SetWindow(16)
+					//right.Net.SetWindow(16)
 					/*for n := range right.Nets {
 						right.Nets[n].SetWindow(16)
 					}*/
-					out.SetWindow(16)
-					win.SetWindow(16)
+					//out.SetWindow(16)
+					//win.SetWindow(16)
 				case 2:
-					center.Net.SetWindow(32)
+					//center.Net.SetWindow(32)
 					/*for n := range center.Nets {
 						center.Nets[n].SetWindow(32)
 					}*/
-					left.Net.SetWindow(32)
+					//left.Net.SetWindow(32)
 					/*for n := range left.Nets {
 						left.Nets[n].SetWindow(32)
 					}*/
-					right.Net.SetWindow(32)
+					//right.Net.SetWindow(32)
 					/*for n := range right.Nets {
 						right.Nets[n].SetWindow(32)
 					}*/
-					out.SetWindow(32)
-					win.SetWindow(32)
+					//out.SetWindow(32)
+					//win.SetWindow(32)
 				}
 			}
 			max, index := 0.0, 0
