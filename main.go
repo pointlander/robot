@@ -85,7 +85,7 @@ const (
 	// Inputs is the number of inputs
 	Inputs = Width * Height
 	// Outputs is the number of outputs
-	Outputs = 32
+	Outputs = 64
 	// Nets is the number of camera nets
 	Nets = 16
 )
