@@ -421,12 +421,9 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		output := NewMatrix(0, 3*Outputs+5, 1)
+		output := NewMatrix(0, 3*Outputs+3, 1)
 		output.Data = output.Data[:cap(output.Data)]
-		out := NewNet(4, Window, 3*Outputs+5, 5)
-		win := NewNet(5, Window, 3*Outputs+5, 3)
-		metaInput := NewMatrix(0, 3*Outputs+5, 1)
-		metaInput.Data = metaInput.Data[:cap(metaInput.Data)]
+		out := NewNet(4, Window, 3*Outputs+3, 3)
 		for running {
 			select {
 			case frame := <-center.Images:
@@ -447,72 +444,18 @@ func main() {
 			copy(output.Data[3*Outputs:], a.Data)
 			fmt.Println("...............................................................................")
 			fmt.Println(a.Data)
-			{
-				copy(metaInput.Data[:3*Outputs], output.Data)
-				copy(metaInput.Data[3*Outputs:], a.Data)
-				w := win.Fire(metaInput)
-				max, index := float32(0.0), 0
-				for i, v := range w.Data {
-					if v > max {
-						max, index = v, i
-					}
-				}
-				switch index {
-				case 0:
-					//center.Net.SetWindow(8)
-					/*for n := range center.Nets {
-						center.Nets[n].SetWindow(8)
-					}*/
-					//left.Net.SetWindow(8)
-					/*for n := range left.Nets {
-						left.Nets[n].SetWindow(8)
-					}*/
-					//right.Net.SetWindow(8)
-					/*for n := range right.Nets {
-						right.Nets[n].SetWindow(8)
-					}*/
-					//out.SetWindow(8)
-					//win.SetWindow(16)
-				case 1:
-					//center.Net.SetWindow(16)
-					/*for n := range center.Nets {
-						center.Nets[n].SetWindow(16)
-					}*/
-					//left.Net.SetWindow(16)
-					/*for n := range left.Nets {
-						left.Nets[n].SetWindow(16)
-					}*/
-					//right.Net.SetWindow(16)
-					/*for n := range right.Nets {
-						right.Nets[n].SetWindow(16)
-					}*/
-					//out.SetWindow(16)
-					//win.SetWindow(16)
-				case 2:
-					//center.Net.SetWindow(32)
-					/*for n := range center.Nets {
-						center.Nets[n].SetWindow(32)
-					}*/
-					//left.Net.SetWindow(32)
-					/*for n := range left.Nets {
-						left.Nets[n].SetWindow(32)
-					}*/
-					//right.Net.SetWindow(32)
-					/*for n := range right.Nets {
-						right.Nets[n].SetWindow(32)
-					}*/
-					//out.SetWindow(32)
-					//win.SetWindow(32)
-				}
-			}
-			max, index := 0.0, 0
-			for i, v := range a.Data {
-				if float64(v) > max {
-					max, index = float64(v), i
-				}
-			}
 			if mode == ModeAuto {
-				switch index {
+				c := 0
+				if a.Data[0] > 0 {
+					c |= 1
+				}
+				if a.Data[1] > 0 {
+					c |= 2
+				}
+				if a.Data[2] > 0 {
+					c |= 4
+				}
+				switch c {
 				case 0:
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateUp
