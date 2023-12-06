@@ -79,7 +79,7 @@ const (
 
 const (
 	// Window is the window size
-	Window = 64
+	Window = 128
 	// Samples is the number of samples
 	Samples = 256
 	// Inputs is the number of inputs
@@ -179,7 +179,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 	for i, entropy := range entropies {
 		systems[i].Entropy = entropy
 	}
-	sort.Slice(entropies, func(i, j int) bool {
+	sort.Slice(systems, func(i, j int) bool {
 		return systems[i].Entropy < systems[j].Entropy
 	})
 	next := make([][]Random, n.Outputs)
@@ -421,9 +421,9 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		output := NewMatrix(0, 3*Outputs+3, 1)
+		output := NewMatrix(0, 3*Outputs, 1)
 		output.Data = output.Data[:cap(output.Data)]
-		out := NewNet(4, Window, 3*Outputs+3, 3)
+		out := NewNet(4, Window, 3*Outputs, 3)
 		for running {
 			select {
 			case frame := <-center.Images:
@@ -441,7 +441,6 @@ func main() {
 			}
 			a := out.Fire(output)
 			a = Normalize(a)
-			copy(output.Data[3*Outputs:], a.Data)
 			fmt.Println("...............................................................................")
 			fmt.Println(a.Data)
 			if mode == ModeAuto {
