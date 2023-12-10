@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"io"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"time"
@@ -47,7 +48,7 @@ func NewStreamCamera(seed int64) *StreamCamera {
 func (sc *StreamCamera) Start() {
 	net := &sc.Net
 	nets := &sc.Nets
-	//var coords [][]Coord
+	var coords [][]Coord
 
 	skip := 0
 	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
@@ -133,22 +134,22 @@ func (sc *StreamCamera) Start() {
 				}
 			}
 			width, height := b.Max.X, b.Max.Y
-			/*if coords == nil {
+			if coords == nil {
 				rng := rand.New(rand.NewSource(sc.Seed + int64(len(*nets))))
 				coords = make([][]Coord, len(*nets))
 				for c := range coords {
 					coords[c] = make([]Coord, 256)
 					for x := 0; x < 256; x++ {
-						coords[c][x].X = rng.Intn(width)
-						coords[c][x].Y = rng.Intn(height)
+						coords[c][x].X = rng.Intn(width / 4)
+						coords[c][x].Y = rng.Intn(height / 4)
 					}
 				}
-			}*/
+			}
 			for n := range *nets {
 				input, sum := NewMatrix(0, 256, 1), 0.0
 				for x := 0; x < 256; x++ {
-					pixel := gray.GrayAt((*nets)[n].Rng.Intn(width/4)+(width/4)*(n%4),
-						(*nets)[n].Rng.Intn(height/4)+(height/4)*(n/4))
+					pixel := gray.GrayAt(coords[n][x].X /*(*nets)[n].Rng.Intn(width/4)*/ +(width/4)*(n%4),
+						coords[n][x].Y /*(*nets)[n].Rng.Intn(height/4)*/ +(height/4)*(n/4))
 					input.Data = append(input.Data, float32(pixel.Y))
 					sum += float64(pixel.Y) * float64(pixel.Y)
 				}

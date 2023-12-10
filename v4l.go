@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"math/rand"
 	"runtime"
 	"sort"
 	"time"
@@ -66,7 +67,7 @@ func NewV4LCamera(seed int64) *V4LCamera {
 func (vc *V4LCamera) Start(device string) {
 	net := &vc.Net
 	nets := &vc.Nets
-	//var coords [][]Coord
+	var coords [][]Coord
 
 	runtime.LockOSThread()
 	skip := 0
@@ -171,22 +172,22 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}
 			width, height := b.Max.X, b.Max.Y
-			/*if coords == nil {
+			if coords == nil {
 				rng := rand.New(rand.NewSource(vc.Seed + int64(len(*nets))))
 				coords = make([][]Coord, len(*nets))
 				for c := range coords {
 					coords[c] = make([]Coord, 256)
 					for x := 0; x < 256; x++ {
-						coords[c][x].X = rng.Intn(width)
-						coords[c][x].Y = rng.Intn(height)
+						coords[c][x].X = rng.Intn(width / 4)
+						coords[c][x].Y = rng.Intn(height / 4)
 					}
 				}
-			}*/
+			}
 			for n := range *nets {
 				input, sum := NewMatrix(0, 256, 1), 0.0
 				for x := 0; x < 256; x++ {
-					pixel := gray.GrayAt((*nets)[n].Rng.Intn(width/4)+(width/4)*(n%4),
-						(*nets)[n].Rng.Intn(height/4)+(height/4)*(n/4))
+					pixel := gray.GrayAt(coords[n][x].X /*(*nets)[n].Rng.Intn(width/4)*/ +(width/4)*(n%4),
+						coords[n][x].Y /*(*nets)[n].Rng.Intn(height/4)*/ +(height/4)*(n/4))
 					input.Data = append(input.Data, float32(pixel.Y))
 					sum += float64(pixel.Y) * float64(pixel.Y)
 				}
