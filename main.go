@@ -488,6 +488,21 @@ func main() {
 		output := NewMatrix(0, 3*Outputs, 1)
 		output.Data = output.Data[:cap(output.Data)]
 		out := NewNet(4, Window, 3*Outputs, 3)
+		setWindow := func(window int64) {
+			out.SetWindow(window)
+			for net := range center.Nets {
+				center.Nets[net].SetWindow(window)
+			}
+			center.Net.SetWindow(window)
+			for net := range left.Nets {
+				left.Nets[net].SetWindow(window)
+			}
+			left.Net.SetWindow(window)
+			for net := range right.Nets {
+				right.Nets[net].SetWindow(window)
+			}
+			right.Net.SetWindow(window)
+		}
 		for running {
 			select {
 			case frame := <-center.Images:
@@ -509,14 +524,10 @@ func main() {
 			fmt.Println(a.Data)
 			if mode == ModeAuto {
 				c := 0
-				if a.Data[0] > 0 {
-					c |= 1
-				}
-				if a.Data[1] > 0 {
-					c |= 2
-				}
-				if a.Data[2] > 0 {
-					c |= 4
+				for i, v := range a.Data {
+					if v > 0 {
+						c |= 1 << i
+					}
 				}
 				switch c {
 				case 0:
@@ -534,6 +545,12 @@ func main() {
 				case 4:
 					joystickLeft = JoystickStateDown
 					joystickRight = JoystickStateDown
+				case 5:
+					setWindow(128)
+				case 6:
+					setWindow(64)
+				case 7:
+					setWindow(32)
 				}
 				update()
 			}
