@@ -52,7 +52,7 @@ type V4LCamera struct {
 func NewV4LCamera(seed int64) *V4LCamera {
 	nets := make([]Net, Nets)
 	for n := range nets {
-		nets[n] = NewNet(seed+1+int64(n), Window, 256, 8)
+		nets[n] = NewNet(seed+1+int64(n), Window, Pixels, 8)
 	}
 	return &V4LCamera{
 		Stream: true,
@@ -176,16 +176,16 @@ func (vc *V4LCamera) Start(device string) {
 				rng := rand.New(rand.NewSource(vc.Seed + int64(len(*nets))))
 				coords = make([][]Coord, len(*nets))
 				for c := range coords {
-					coords[c] = make([]Coord, 256)
-					for x := 0; x < 256; x++ {
+					coords[c] = make([]Coord, Pixels)
+					for x := 0; x < Pixels; x++ {
 						coords[c][x].X = rng.Intn(width / 4)
 						coords[c][x].Y = rng.Intn(height / 4)
 					}
 				}
 			}
 			for n := range *nets {
-				input, sum := NewMatrix(0, 256, 1), 0.0
-				for x := 0; x < 256; x++ {
+				input, sum := NewMatrix(0, Pixels, 1), 0.0
+				for x := 0; x < Pixels; x++ {
 					pixel := gray.GrayAt(coords[n][x].X /*(*nets)[n].Rng.Intn(width/4)*/ +(width/4)*(n%4),
 						coords[n][x].Y /*(*nets)[n].Rng.Intn(height/4)*/ +(height/4)*(n/4))
 					input.Data = append(input.Data, float32(pixel.Y))

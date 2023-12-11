@@ -88,6 +88,8 @@ const (
 	Outputs = 64
 	// Nets is the number of camera nets
 	Nets = 16
+	// Pixels is the number of pixels to sample
+	Pixels = 512
 )
 
 // Coord is a coordinate
@@ -435,7 +437,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	pwm := 50
+	pwm := 75
 	t := time.Tick(5 * time.Microsecond)
 	go func() {
 		counter, state := 0, 0
