@@ -89,7 +89,7 @@ const (
 	// Nets is the number of camera nets
 	Nets = 16
 	// Pixels is the number of pixels to sample
-	Pixels = 512
+	Pixels = 256
 )
 
 // Coord is a coordinate

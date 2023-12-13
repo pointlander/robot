@@ -52,7 +52,7 @@ type V4LCamera struct {
 func NewV4LCamera(seed int64) *V4LCamera {
 	nets := make([]Net, Nets)
 	for n := range nets {
-		nets[n] = NewNet(seed+1+int64(n), Window, Pixels, 8)
+		nets[n] = NewNet(seed+1+int64(n), Window, 3*Pixels, 8)
 	}
 	return &V4LCamera{
 		Stream: true,
@@ -163,14 +163,14 @@ func (vc *V4LCamera) Start(device string) {
 			outputs := []Matrix{}
 			img := yuyv
 			b := img.Bounds()
-			gray := image.NewGray(b)
+			/*gray := image.NewGray(b)
 			for y := 0; y < b.Max.Y; y++ {
 				for x := 0; x < b.Max.X; x++ {
 					original := img.At(x, y)
 					pixel := color.GrayModel.Convert(original)
 					gray.Set(x, y, pixel)
 				}
-			}
+			}*/
 			width, height := b.Max.X, b.Max.Y
 			if coords == nil {
 				rng := rand.New(rand.NewSource(vc.Seed + int64(len(*nets))))
@@ -184,12 +184,19 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}
 			for n := range *nets {
-				input, sum := NewMatrix(0, Pixels, 1), 0.0
+				input, sum := NewMatrix(0, 3*Pixels, 1), 0.0
 				for x := 0; x < Pixels; x++ {
-					pixel := gray.GrayAt(coords[n][x].X /*(*nets)[n].Rng.Intn(width/4)*/ +(width/4)*(n%4),
-						coords[n][x].Y /*(*nets)[n].Rng.Intn(height/4)*/ +(height/4)*(n/4))
-					input.Data = append(input.Data, float32(pixel.Y))
-					sum += float64(pixel.Y) * float64(pixel.Y)
+					//pixel := gray.GrayAt(coords[n][x].X /*(*nets)[n].Rng.Intn(width/4)*/ +(width/4)*(n%4),
+					//	coords[n][x].Y /*(*nets)[n].Rng.Intn(height/4)*/ +(height/4)*(n/4))
+					//input.Data = append(input.Data, float32(pixel.Y))
+					pixel := img.At(coords[n][x].X+(width/4)*(n%4), coords[n][x].Y+(height/4)*(n/4))
+					r, g, b, _ := pixel.RGBA()
+					y, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
+					fy, fcb, fcr := float64(y)/255, float64(cb)/255, float64(cr)/255
+					input.Data = append(input.Data, float32(fy))
+					input.Data = append(input.Data, float32(fcb))
+					input.Data = append(input.Data, float32(fcr))
+					sum += fy*fy + fcb*fcb + fcr*fcr
 				}
 				length := math.Sqrt(sum)
 				for x := range input.Data {
