@@ -187,6 +187,8 @@ github.com/pointlander/gradient v0.0.0-20230828203002-af1492b01f47 h1:saVXIw+UMc
 github.com/pointlander/gradient v0.0.0-20230828203002-af1492b01f47/go.mod h1:gVxcVB9oJ9tPTLxBB4mLnZ7gQ3tRdkLxr0v7WPkahJ8=
 github.com/pointlander/matrix v0.0.0-20231128215310-2af29afdb475 h1:u02awvVg3yQ270yeHvX9e2Je38ljDWdCcYlNyE4p2qw=
 github.com/pointlander/matrix v0.0.0-20231128215310-2af29afdb475/go.mod h1:R2WXwlYirhLAk/tnvuuvrzV3rsecpTNY1iqSJIcXaEo=
+github.com/pointlander/matrix v0.0.0-20231213213732-3f3865683b2e h1:6cqzZOSf9k2SjTqiDQcivBf3+/hSBoLMyRSO03kmWLY=
+github.com/pointlander/matrix v0.0.0-20231213213732-3f3865683b2e/go.mod h1:R2WXwlYirhLAk/tnvuuvrzV3rsecpTNY1iqSJIcXaEo=
 github.com/pointlander/occam v0.0.0-20221029020155-a3a656c2c658 h1:VFfL0CObIQVRjeNaqrW3HjusK1OfjAuKp/HdZPuQ388=
 github.com/pointlander/occam v0.0.0-20221029020155-a3a656c2c658/go.mod h1:IGxdq365JEerXKwmYh0T4rFtE4076Sbw32/kggORmEw=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=

@@ -163,14 +163,6 @@ func (vc *V4LCamera) Start(device string) {
 			outputs := []Matrix{}
 			img := yuyv
 			b := img.Bounds()
-			/*gray := image.NewGray(b)
-			for y := 0; y < b.Max.Y; y++ {
-				for x := 0; x < b.Max.X; x++ {
-					original := img.At(x, y)
-					pixel := color.GrayModel.Convert(original)
-					gray.Set(x, y, pixel)
-				}
-			}*/
 			width, height := b.Max.X, b.Max.Y
 			if coords == nil {
 				rng := rand.New(rand.NewSource(vc.Seed + int64(len(*nets))))
@@ -186,9 +178,6 @@ func (vc *V4LCamera) Start(device string) {
 			for n := range *nets {
 				input, sum := NewMatrix(0, 3*Pixels, 1), 0.0
 				for x := 0; x < Pixels; x++ {
-					//pixel := gray.GrayAt(coords[n][x].X /*(*nets)[n].Rng.Intn(width/4)*/ +(width/4)*(n%4),
-					//	coords[n][x].Y /*(*nets)[n].Rng.Intn(height/4)*/ +(height/4)*(n/4))
-					//input.Data = append(input.Data, float32(pixel.Y))
 					pixel := img.At(coords[n][x].X+(width/4)*(n%4), coords[n][x].Y+(height/4)*(n/4))
 					r, g, b, _ := pixel.RGBA()
 					y, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
@@ -205,31 +194,6 @@ func (vc *V4LCamera) Start(device string) {
 				outputs = append(outputs, (*nets)[n].Fire(input))
 			}
 
-			/*tiny := resize.Resize(Width, Height, yuyv, resize.Lanczos3)
-			b := tiny.Bounds()
-			gray := image.NewGray(b)
-			for y := 0; y < b.Max.Y; y++ {
-				for x := 0; x < b.Max.X; x++ {
-					original := tiny.At(x, y)
-					pixel := color.GrayModel.Convert(original)
-					gray.Set(x, y, pixel)
-				}
-			}
-			width, height := b.Max.X, b.Max.Y
-			pixels := make([][]float64, height)
-			for j := range pixels {
-				pix := make([]float64, width)
-				for i := range pix {
-					pix[i] = float64(gray.At(i, j).(color.Gray).Y) / 255
-				}
-				pixels[j] = pix
-			}*/
-			/*output := fft.FFT2Real(pixels)
-			for j, pix := range pixels {
-				for i := range pix {
-					pix[i] = cmplx.Abs(output[j][i]) / float64(width*height)
-				}
-			}*/
 			sum := 0.0
 			input := NewMatrix(0, Nets*8, 1)
 			for _, a := range outputs {
