@@ -63,12 +63,14 @@ const (
 const (
 	// Window is the window size
 	Window = 128
+	// Rate is the learning rate
+	Rate = .3
 	// Outputs is the number of outputs
 	Outputs = 64
 	// Nets is the number of camera nets
 	Nets = 16
 	// Pixels is the number of pixels to sample
-	Pixels = 256
+	Pixels = 128
 )
 
 // Coord is a coordinate

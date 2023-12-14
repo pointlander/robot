@@ -200,8 +200,26 @@ func (n *Net) Fire(input Matrix) Matrix {
 		return systemsV[i].Entropy < systemsV[j].Entropy
 	})
 
-	n.Q = n.CalculateStatistics(systemsQ)
-	n.K = n.CalculateStatistics(systemsK)
-	n.V = n.CalculateStatistics(systemsV)
+	nq := n.CalculateStatistics(systemsQ)
+	for i, v := range nq {
+		for j, vv := range v {
+			n.Q[i][j].Mean = (1-Rate)*n.Q[i][j].Mean + Rate*vv.Mean
+			n.Q[i][j].StdDev = (1-Rate)*n.Q[i][j].StdDev + Rate*vv.StdDev
+		}
+	}
+	nk := n.CalculateStatistics(systemsK)
+	for i, v := range nk {
+		for j, vv := range v {
+			n.K[i][j].Mean = (1-Rate)*n.K[i][j].Mean + Rate*vv.Mean
+			n.K[i][j].StdDev = (1-Rate)*n.K[i][j].StdDev + Rate*vv.StdDev
+		}
+	}
+	nv := n.CalculateStatistics(systemsV)
+	for i, v := range nv {
+		for j, vv := range v {
+			n.V[i][j].Mean = (1-Rate)*n.V[i][j].Mean + Rate*vv.Mean
+			n.V[i][j].StdDev = (1-Rate)*n.V[i][j].StdDev + Rate*vv.StdDev
+		}
+	}
 	return systemsV[0].Outputs
 }
