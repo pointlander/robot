@@ -139,9 +139,9 @@ func (n Net) CalculateStatistics(systems []Sample) Set {
 
 // Fire runs the network
 func (n *Net) Fire(input Matrix) Matrix {
-	q := NewMatrix(0, n.Outputs+n.Inputs, Samples)
-	k := NewMatrix(0, n.Outputs+n.Inputs, Samples)
-	v := NewMatrix(0, n.Outputs+n.Inputs, Samples)
+	q := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
+	k := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
+	v := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
 	systemsQ := make([]Sample, 0, 8)
 	systemsK := make([]Sample, 0, 8)
 	systemsV := make([]Sample, 0, 8)
@@ -166,6 +166,17 @@ func (n *Net) Fire(input Matrix) Matrix {
 		for j, a := range a {
 			b := b[j]
 			a, b = a/(a+b), b/(a+b)
+			q.Data = append(q.Data, -float32(a*math.Log(a)+b*math.Log(b)))
+		}
+		for j := range neurons {
+			a, b := 0.0, 0.0
+			for _, value := range neurons[j].Data {
+				if value < 0 {
+					a++
+				} else {
+					b++
+				}
+			}
 			q.Data = append(q.Data, -float32(a*math.Log(a)+b*math.Log(b)))
 		}
 		systemsQ = append(systemsQ, Sample{
@@ -196,6 +207,17 @@ func (n *Net) Fire(input Matrix) Matrix {
 			a, b = a/(a+b), b/(a+b)
 			k.Data = append(k.Data, -float32(a*math.Log(a)+b*math.Log(b)))
 		}
+		for j := range neurons {
+			a, b := 0.0, 0.0
+			for _, value := range neurons[j].Data {
+				if value < 0 {
+					a++
+				} else {
+					b++
+				}
+			}
+			k.Data = append(k.Data, -float32(a*math.Log(a)+b*math.Log(b)))
+		}
 		systemsK = append(systemsK, Sample{
 			Neurons: neurons,
 			Outputs: outputs,
@@ -222,6 +244,17 @@ func (n *Net) Fire(input Matrix) Matrix {
 		for j, a := range a {
 			b := b[j]
 			a, b = a/(a+b), b/(a+b)
+			v.Data = append(v.Data, -float32(a*math.Log(a)+b*math.Log(b)))
+		}
+		for j := range neurons {
+			a, b := 0.0, 0.0
+			for _, value := range neurons[j].Data {
+				if value < 0 {
+					a++
+				} else {
+					b++
+				}
+			}
 			v.Data = append(v.Data, -float32(a*math.Log(a)+b*math.Log(b)))
 		}
 		systemsV = append(systemsV, Sample{
