@@ -98,9 +98,11 @@ func (j JoystickState) String() string {
 
 // Frame is a video frame
 type Frame struct {
-	Frame  image.Image
-	DCT    [][]float64
-	Output Matrix
+	Frame image.Image
+	DCT   [][]float64
+	Query Matrix
+	Key   Matrix
+	Value Matrix
 }
 
 func picture() {
@@ -279,9 +281,13 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		output := NewMatrix(0, 3*3*Outputs, 1)
-		output.Data = output.Data[:cap(output.Data)]
-		out := NewNet(4, Window, 3*3*Outputs, 3)
+		query := NewMatrix(0, 3*Outputs, 1)
+		query.Data = query.Data[:cap(query.Data)]
+		key := NewMatrix(0, 3*Outputs, 1)
+		key.Data = key.Data[:cap(key.Data)]
+		value := NewMatrix(0, 3*Outputs, 1)
+		value.Data = value.Data[:cap(value.Data)]
+		out := NewNet(4, Window, 3*Outputs, 3)
 		setWindow := func(window int64) {
 			out.SetWindow(window)
 			for net := range center.Nets {
@@ -302,27 +308,35 @@ func main() {
 			case frame := <-center.Images:
 				fmt.Println("center", frame.Frame.Bounds())
 				// 640,480
-				copy(output.Data[:3*Outputs], frame.Output.Data)
+				copy(query.Data[:Outputs], frame.Query.Data)
+				copy(key.Data[:Outputs], frame.Key.Data)
+				copy(value.Data[:Outputs], frame.Value.Data)
 			case frame := <-left.Images:
 				fmt.Println("left", frame.Frame.Bounds())
 				// 320,240
-				copy(output.Data[3*Outputs:3*2*Outputs], frame.Output.Data)
+				copy(query.Data[Outputs:2*Outputs], frame.Query.Data)
+				copy(key.Data[Outputs:2*Outputs], frame.Key.Data)
+				copy(value.Data[Outputs:2*Outputs], frame.Value.Data)
 			case frame := <-right.Images:
 				fmt.Println("right", frame.Frame.Bounds())
 				// 320,240
-				copy(output.Data[3*2*Outputs:3*3*Outputs], frame.Output.Data)
+				copy(query.Data[2*Outputs:3*Outputs], frame.Query.Data)
+				copy(key.Data[2*Outputs:3*Outputs], frame.Key.Data)
+				copy(value.Data[2*Outputs:3*Outputs], frame.Value.Data)
 			}
-			a := out.Fire(output)
-			a = Normalize(a)
+			q, k, v := out.Fire(query, key, value)
+			q = Normalize(q)
+			k = Normalize(k)
+			v = Normalize(v)
 			fmt.Println("...............................................................................")
-			fmt.Println(a.Data)
+			fmt.Println(v.Data)
 			if mode == ModeAuto {
 				/*sum := [3]float32{}
 				for i := range sum {
 					sum[i] += a.Data[i] + a.Data[i+3] + a.Data[i+6]
 				}*/
 				c := 0
-				for i, v := range a.Data[6:] {
+				for i, v := range v.Data {
 					if v > 0 {
 						c |= 1 << i
 					}

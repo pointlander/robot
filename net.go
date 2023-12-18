@@ -138,7 +138,7 @@ func (n Net) CalculateStatistics(systems []Sample) Set {
 }
 
 // Fire runs the network
-func (n *Net) Fire(input Matrix) Matrix {
+func (n *Net) Fire(query, key, value Matrix) (Matrix, Matrix, Matrix) {
 	q := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
 	k := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
 	v := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
@@ -149,7 +149,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 		neurons := n.Q.Sample(n.Rng, n.Inputs, n.Outputs)
 		outputs := NewMatrix(0, n.Outputs, 1)
 		for j := range neurons {
-			out := MulT(neurons[j], input)
+			out := MulT(neurons[j], query)
 			q.Data = append(q.Data, out.Data[0])
 			outputs.Data = append(outputs.Data, out.Data[0])
 		}
@@ -188,7 +188,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 		neurons := n.K.Sample(n.Rng, n.Inputs, n.Outputs)
 		outputs := NewMatrix(0, n.Outputs, 1)
 		for j := range neurons {
-			out := MulT(neurons[j], input)
+			out := MulT(neurons[j], key)
 			k.Data = append(k.Data, out.Data[0])
 			outputs.Data = append(outputs.Data, out.Data[0])
 		}
@@ -227,7 +227,7 @@ func (n *Net) Fire(input Matrix) Matrix {
 		neurons := n.V.Sample(n.Rng, n.Inputs, n.Outputs)
 		outputs := NewMatrix(0, n.Outputs, 1)
 		for j := range neurons {
-			out := MulT(neurons[j], input)
+			out := MulT(neurons[j], value)
 			v.Data = append(v.Data, out.Data[0])
 			outputs.Data = append(outputs.Data, out.Data[0])
 		}
@@ -299,9 +299,5 @@ func (n *Net) Fire(input Matrix) Matrix {
 			n.V[i][j].StdDev = (1-Rate)*n.V[i][j].StdDev + Rate*vv.StdDev
 		}
 	}
-	vector := NewMatrix(0, 3*n.Outputs, 1)
-	vector.Data = append(vector.Data, systemsQ[0].Outputs.Data...)
-	vector.Data = append(vector.Data, systemsK[0].Outputs.Data...)
-	vector.Data = append(vector.Data, systemsV[0].Outputs.Data...)
-	return vector
+	return systemsQ[0].Outputs, systemsK[0].Outputs, systemsV[0].Outputs
 }
