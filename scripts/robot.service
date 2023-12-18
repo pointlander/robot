@@ -1,0 +1,11 @@
+[Unit]
+Description=robot service
+
+[Service]
+User=andrew
+WorkingDirectory=/home/andrew/robot/
+ExecStart=/home/andrew/robot/robot
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
