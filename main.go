@@ -331,10 +331,6 @@ func main() {
 			fmt.Println("...............................................................................")
 			fmt.Println(v.Data)
 			if mode == ModeAuto {
-				/*sum := [3]float32{}
-				for i := range sum {
-					sum[i] += a.Data[i] + a.Data[i+3] + a.Data[i+6]
-				}*/
 				c := 0
 				for i, v := range v.Data {
 					if v > 0 {

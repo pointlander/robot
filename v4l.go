@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"math"
 	"math/rand"
 	"runtime"
 	"sort"
@@ -176,7 +175,7 @@ func (vc *V4LCamera) Start(device string) {
 				}
 			}
 			for n := range *nets {
-				input, sum := NewMatrix(0, 3*Pixels, 1), 0.0
+				input := NewMatrix(0, 3*Pixels, 1)
 				for x := 0; x < Pixels; x++ {
 					pixel := img.At(coords[n][x].X+(width/4)*(n%4), coords[n][x].Y+(height/4)*(n/4))
 					r, g, b, _ := pixel.RGBA()
@@ -185,60 +184,42 @@ func (vc *V4LCamera) Start(device string) {
 					input.Data = append(input.Data, float32(fy))
 					input.Data = append(input.Data, float32(fcb))
 					input.Data = append(input.Data, float32(fcr))
-					sum += fy*fy + fcb*fcb + fcr*fcr
 				}
-				length := math.Sqrt(sum)
-				for x := range input.Data {
-					input.Data[x] /= float32(length)
-				}
+				input = Normalize(input)
 				q, k, v := (*nets)[n].Fire(input, input, input)
 				query = append(query, q)
 				key = append(key, k)
 				value = append(value, v)
 			}
 
-			sum := 0.0
 			qq := NewMatrix(0, Nets*8, 1)
 			for _, a := range query {
 				for _, b := range a.Data {
-					sum += float64(b) * float64(b)
 					qq.Data = append(qq.Data, b)
 				}
 			}
-			length := math.Sqrt(sum)
-			for i := range qq.Data {
-				qq.Data[i] /= float32(length)
-			}
+			qq = Normalize(qq)
 
 			kk := NewMatrix(0, Nets*8, 1)
 			for _, a := range key {
 				for _, b := range a.Data {
-					sum += float64(b) * float64(b)
 					kk.Data = append(kk.Data, b)
 				}
 			}
-			length = math.Sqrt(sum)
-			for i := range kk.Data {
-				kk.Data[i] /= float32(length)
-			}
+			kk = Normalize(kk)
 
 			vv := NewMatrix(0, Nets*8, 1)
 			for _, a := range value {
 				for _, b := range a.Data {
-					sum += float64(b) * float64(b)
 					vv.Data = append(vv.Data, b)
 				}
 			}
-			length = math.Sqrt(sum)
-			for i := range vv.Data {
-				vv.Data[i] /= float32(length)
-			}
+			vv = Normalize(vv)
 
 			q, k, v := net.Fire(qq, kk, vv)
 			select {
 			case vc.Images <- Frame{
 				Frame: yuyv,
-				//DCT:    pixels,
 				Query: q,
 				Key:   k,
 				Value: v,
