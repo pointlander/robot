@@ -38,7 +38,7 @@ func NewStreamCamera(seed int64) *StreamCamera {
 		Stream: true,
 		Images: make(chan Frame, 8),
 		Seed:   seed,
-		Net:    NewNet(seed, Window, Nets*8, Outputs),
+		Net:    NewNet(seed, Window, 3*Nets*8, Outputs),
 		Nets:   nets,
 	}
 }
@@ -156,7 +156,7 @@ func (sc *StreamCamera) Start() {
 			}
 
 			sum := 0.0
-			input := NewMatrix(0, Nets*8, 1)
+			input := NewMatrix(0, 3*Nets*8, 1)
 			for _, a := range outputs {
 				for _, b := range a.Data {
 					sum += float64(b) * float64(b)

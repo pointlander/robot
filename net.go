@@ -299,5 +299,9 @@ func (n *Net) Fire(input Matrix) Matrix {
 			n.V[i][j].StdDev = (1-Rate)*n.V[i][j].StdDev + Rate*vv.StdDev
 		}
 	}
-	return systemsV[0].Outputs
+	vector := NewMatrix(0, 3*n.Outputs, 1)
+	vector.Data = append(vector.Data, systemsQ[0].Outputs.Data...)
+	vector.Data = append(vector.Data, systemsK[0].Outputs.Data...)
+	vector.Data = append(vector.Data, systemsV[0].Outputs.Data...)
+	return vector
 }

@@ -279,9 +279,9 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		output := NewMatrix(0, 3*Outputs, 1)
+		output := NewMatrix(0, 3*3*Outputs, 1)
 		output.Data = output.Data[:cap(output.Data)]
-		out := NewNet(4, Window, 3*Outputs, 3)
+		out := NewNet(4, Window, 3*3*Outputs, 3)
 		setWindow := func(window int64) {
 			out.SetWindow(window)
 			for net := range center.Nets {
@@ -302,23 +302,27 @@ func main() {
 			case frame := <-center.Images:
 				fmt.Println("center", frame.Frame.Bounds())
 				// 640,480
-				copy(output.Data[:Outputs], frame.Output.Data)
+				copy(output.Data[:3*Outputs], frame.Output.Data)
 			case frame := <-left.Images:
 				fmt.Println("left", frame.Frame.Bounds())
 				// 320,240
-				copy(output.Data[Outputs:2*Outputs], frame.Output.Data)
+				copy(output.Data[3*Outputs:3*2*Outputs], frame.Output.Data)
 			case frame := <-right.Images:
 				fmt.Println("right", frame.Frame.Bounds())
 				// 320,240
-				copy(output.Data[2*Outputs:3*Outputs], frame.Output.Data)
+				copy(output.Data[3*2*Outputs:3*3*Outputs], frame.Output.Data)
 			}
 			a := out.Fire(output)
 			a = Normalize(a)
 			fmt.Println("...............................................................................")
 			fmt.Println(a.Data)
 			if mode == ModeAuto {
+				/*sum := [3]float32{}
+				for i := range sum {
+					sum[i] += a.Data[i] + a.Data[i+3] + a.Data[i+6]
+				}*/
 				c := 0
-				for i, v := range a.Data {
+				for i, v := range a.Data[6:] {
 					if v > 0 {
 						c |= 1 << i
 					}
