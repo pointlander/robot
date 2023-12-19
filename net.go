@@ -139,9 +139,9 @@ func (n Net) CalculateStatistics(systems []Sample) Set {
 
 // Fire runs the network
 func (n *Net) Fire(query, key, value Matrix) (Matrix, Matrix, Matrix) {
-	q := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
-	k := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
-	v := NewMatrix(0, 2*n.Outputs+n.Inputs, Samples)
+	q := NewMatrix(0, n.Outputs, Samples)
+	k := NewMatrix(0, n.Outputs, Samples)
+	v := NewMatrix(0, n.Outputs, Samples)
 	systemsQ := make([]Sample, 0, 8)
 	systemsK := make([]Sample, 0, 8)
 	systemsV := make([]Sample, 0, 8)
@@ -152,32 +152,6 @@ func (n *Net) Fire(query, key, value Matrix) (Matrix, Matrix, Matrix) {
 			out := MulT(neurons[j], query)
 			q.Data = append(q.Data, out.Data[0])
 			outputs.Data = append(outputs.Data, out.Data[0])
-		}
-		a, b := make([]float64, n.Inputs), make([]float64, n.Inputs)
-		for j := range neurons {
-			for jj, value := range neurons[j].Data {
-				if value < 0 {
-					a[jj]++
-				} else {
-					b[jj]++
-				}
-			}
-		}
-		for j, a := range a {
-			b := b[j]
-			a, b = a/(a+b), b/(a+b)
-			q.Data = append(q.Data, -float32(a*math.Log(a)+b*math.Log(b)))
-		}
-		for j := range neurons {
-			a, b := 0.0, 0.0
-			for _, value := range neurons[j].Data {
-				if value < 0 {
-					a++
-				} else {
-					b++
-				}
-			}
-			q.Data = append(q.Data, -float32(a*math.Log(a)+b*math.Log(b)))
 		}
 		systemsQ = append(systemsQ, Sample{
 			Neurons: neurons,
@@ -192,32 +166,6 @@ func (n *Net) Fire(query, key, value Matrix) (Matrix, Matrix, Matrix) {
 			k.Data = append(k.Data, out.Data[0])
 			outputs.Data = append(outputs.Data, out.Data[0])
 		}
-		a, b := make([]float64, n.Inputs), make([]float64, n.Inputs)
-		for j := range neurons {
-			for jj, value := range neurons[j].Data {
-				if value < 0 {
-					a[jj]++
-				} else {
-					b[jj]++
-				}
-			}
-		}
-		for j, a := range a {
-			b := b[j]
-			a, b = a/(a+b), b/(a+b)
-			k.Data = append(k.Data, -float32(a*math.Log(a)+b*math.Log(b)))
-		}
-		for j := range neurons {
-			a, b := 0.0, 0.0
-			for _, value := range neurons[j].Data {
-				if value < 0 {
-					a++
-				} else {
-					b++
-				}
-			}
-			k.Data = append(k.Data, -float32(a*math.Log(a)+b*math.Log(b)))
-		}
 		systemsK = append(systemsK, Sample{
 			Neurons: neurons,
 			Outputs: outputs,
@@ -230,32 +178,6 @@ func (n *Net) Fire(query, key, value Matrix) (Matrix, Matrix, Matrix) {
 			out := MulT(neurons[j], value)
 			v.Data = append(v.Data, out.Data[0])
 			outputs.Data = append(outputs.Data, out.Data[0])
-		}
-		a, b := make([]float64, n.Inputs), make([]float64, n.Inputs)
-		for j := range neurons {
-			for jj, value := range neurons[j].Data {
-				if value < 0 {
-					a[jj]++
-				} else {
-					b[jj]++
-				}
-			}
-		}
-		for j, a := range a {
-			b := b[j]
-			a, b = a/(a+b), b/(a+b)
-			v.Data = append(v.Data, -float32(a*math.Log(a)+b*math.Log(b)))
-		}
-		for j := range neurons {
-			a, b := 0.0, 0.0
-			for _, value := range neurons[j].Data {
-				if value < 0 {
-					a++
-				} else {
-					b++
-				}
-			}
-			v.Data = append(v.Data, -float32(a*math.Log(a)+b*math.Log(b)))
 		}
 		systemsV = append(systemsV, Sample{
 			Neurons: neurons,
