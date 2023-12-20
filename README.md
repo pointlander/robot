@@ -1,3 +1,6 @@
 # robot using only cameras
+## operation
+The robot operates on the principal of [occam's razor](https://en.wikipedia.org/wiki/Occam%27s_razor): the action with the lowest entropy is chosen. To find the action with the lowest entropy camera data is fed into an unsupervised learning layer. Each unsupervised leraning layer feeds input into neural networks with weights sampled from gaussian probability distributions. The output of the neural networks is then fed into a self entropy calculation based on [self attention](https://arxiv.org/abs/1706.03762): entropy(softmax(softmax(Q*transpose(K))*V)). The output of the layer is the output of the random neural network with the lowest self entropy. Based on the neural networks with lower entropy outputs the gaussian's probability distributions are updated. The current robot implementation has three of these layers. The first layer processes pixels from a subset of a camera's pixels. The next layer combines the camera pixel layers into a single output. Three of these layers, one for each camera, are then combined into a layer for generating an output that determines what the robot will do.
+## results
 * [mark 2 youtube video](https://youtu.be/3d0a7on7qjA)
 * [mark 1 youtube video](https://youtu.be/alYwz7Ks5b4)
