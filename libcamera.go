@@ -6,14 +6,10 @@ package main
 
 import (
 	"fmt"
-	"image/color"
 	"io"
-	"math/rand"
 	"os"
 	"os/exec"
 	"time"
-
-	. "github.com/pointlander/matrix"
 
 	"github.com/zergon321/reisen"
 )
@@ -22,32 +18,18 @@ import (
 type StreamCamera struct {
 	Stream bool
 	Images chan Frame
-	Seed   int64
-	Net    Net
-	Nets   []Net
 }
 
 // NewStreamCamera creates a new streaming camera
-func NewStreamCamera(seed int64) *StreamCamera {
-	nets := make([]Net, Nets)
-	for n := range nets {
-		nets[n] = NewNet(seed+1+int64(n), Window, 3*Pixels, 8)
-	}
+func NewStreamCamera() *StreamCamera {
 	return &StreamCamera{
 		Stream: true,
-		Images: make(chan Frame, 8),
-		Seed:   seed,
-		Net:    NewNet(seed, Window, Nets*8, Outputs),
-		Nets:   nets,
+		Images: make(chan Frame, 1),
 	}
 }
 
 // Start starts streaming
 func (sc *StreamCamera) Start() {
-	net := &sc.Net
-	nets := &sc.Nets
-	var coords [][]Coord
-
 	skip := 0
 	command := exec.Command("libcamera-vid", "-t", "0", "-o", "-")
 	input, err := command.StdoutPipe()
@@ -120,70 +102,9 @@ func (sc *StreamCamera) Start() {
 				continue
 			}
 
-			query, key, value := []Matrix{}, []Matrix{}, []Matrix{}
-			img := videoFrame.Image()
-			b := img.Bounds()
-			width, height := b.Max.X, b.Max.Y
-			if coords == nil {
-				rng := rand.New(rand.NewSource(sc.Seed + int64(len(*nets))))
-				coords = make([][]Coord, len(*nets))
-				for c := range coords {
-					coords[c] = make([]Coord, Pixels)
-					for x := 0; x < Pixels; x++ {
-						coords[c][x].X = rng.Intn(width / 4)
-						coords[c][x].Y = rng.Intn(height / 4)
-					}
-				}
-			}
-			for n := range *nets {
-				input := NewMatrix(0, 3*Pixels, 1)
-				for x := 0; x < Pixels; x++ {
-					pixel := img.At(coords[n][x].X+(width/4)*(n%4), coords[n][x].Y+(height/4)*(n/4))
-					r, g, b, _ := pixel.RGBA()
-					y, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
-					fy, fcb, fcr := float64(y)/255, float64(cb)/255, float64(cr)/255
-					input.Data = append(input.Data, float32(fy))
-					input.Data = append(input.Data, float32(fcb))
-					input.Data = append(input.Data, float32(fcr))
-				}
-				input = Normalize(input)
-				q, k, v := (*nets)[n].Fire(input, input, input)
-				query = append(query, q)
-				key = append(key, k)
-				value = append(value, v)
-			}
-
-			qq := NewMatrix(0, Nets*8, 1)
-			for _, a := range query {
-				for _, b := range a.Data {
-					qq.Data = append(qq.Data, b)
-				}
-			}
-			qq = Normalize(qq)
-
-			kk := NewMatrix(0, Nets*8, 1)
-			for _, a := range key {
-				for _, b := range a.Data {
-					kk.Data = append(kk.Data, b)
-				}
-			}
-			kk = Normalize(kk)
-
-			vv := NewMatrix(0, Nets*8, 1)
-			for _, a := range value {
-				for _, b := range a.Data {
-					vv.Data = append(vv.Data, b)
-				}
-			}
-			vv = Normalize(vv)
-
-			q, k, v := net.Fire(qq, kk, vv)
 			select {
 			case sc.Images <- Frame{
 				Frame: videoFrame.Image(),
-				Query: q,
-				Key:   k,
-				Value: v,
 			}:
 			default:
 				fmt.Println("drop center")

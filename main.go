@@ -12,6 +12,7 @@ import (
 	"image/color/palette"
 	"image/draw"
 	"image/gif"
+	"math/rand"
 	"os"
 	"time"
 
@@ -105,10 +106,105 @@ type Frame struct {
 	Value Matrix
 }
 
+// FrameProcessor is a frame processor
+type FrameProcessor struct {
+	Seed   int64
+	Net    Net
+	Nets   []Net
+	Coords [][]Coord
+	Input  chan Frame
+}
+
+// NewFrameProcessor creates a new frame processor
+func NewFrameProcessor(seed int64) *FrameProcessor {
+	nets := make([]Net, Nets)
+	for n := range nets {
+		nets[n] = NewNet(seed+1+int64(n), Window, 3*Pixels, 8)
+	}
+	return &FrameProcessor{
+		Seed:  seed,
+		Net:   NewNet(seed, Window, Nets*8, Outputs),
+		Nets:  nets,
+		Input: make(chan Frame, 1),
+	}
+}
+
+// Process processes a frames
+func (f *FrameProcessor) Process(output chan Frame) {
+	nets, coords, net := &f.Nets, f.Coords, &f.Net
+	query, key, value := []Matrix{}, []Matrix{}, []Matrix{}
+	for frame := range f.Input {
+		img := frame.Frame
+		b := img.Bounds()
+		width, height := b.Max.X, b.Max.Y
+		if coords == nil {
+			rng := rand.New(rand.NewSource(f.Seed))
+			coords = make([][]Coord, len(*nets))
+			for c := range coords {
+				coords[c] = make([]Coord, Pixels)
+				for x := 0; x < Pixels; x++ {
+					coords[c][x].X = rng.Intn(width / 4)
+					coords[c][x].Y = rng.Intn(height / 4)
+				}
+			}
+			f.Coords = coords
+		}
+		for n := range *nets {
+			input := NewMatrix(0, 3*Pixels, 1)
+			for x := 0; x < Pixels; x++ {
+				pixel := img.At(coords[n][x].X+(width/4)*(n%4), coords[n][x].Y+(height/4)*(n/4))
+				r, g, b, _ := pixel.RGBA()
+				y, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
+				fy, fcb, fcr := float64(y)/255, float64(cb)/255, float64(cr)/255
+				input.Data = append(input.Data, float32(fy))
+				input.Data = append(input.Data, float32(fcb))
+				input.Data = append(input.Data, float32(fcr))
+			}
+			input = Normalize(input)
+			q, k, v := (*nets)[n].Fire(input, input, input)
+			query = append(query, q)
+			key = append(key, k)
+			value = append(value, v)
+		}
+
+		qq := NewMatrix(0, Nets*8, 1)
+		for _, a := range query {
+			for _, b := range a.Data {
+				qq.Data = append(qq.Data, b)
+			}
+		}
+		qq = Normalize(qq)
+
+		kk := NewMatrix(0, Nets*8, 1)
+		for _, a := range key {
+			for _, b := range a.Data {
+				kk.Data = append(kk.Data, b)
+			}
+		}
+		kk = Normalize(kk)
+
+		vv := NewMatrix(0, Nets*8, 1)
+		for _, a := range value {
+			for _, b := range a.Data {
+				vv.Data = append(vv.Data, b)
+			}
+		}
+		vv = Normalize(vv)
+
+		q, k, v := net.Fire(qq, kk, vv)
+		output <- Frame{
+			Frame: img,
+			Query: q,
+			Key:   k,
+			Value: v,
+		}
+	}
+}
+
 func picture() {
-	stream := NewStreamCamera(1)
-	left := NewV4LCamera(2)
-	right := NewV4LCamera(3)
+	stream := NewStreamCamera()
+	left := NewV4LCamera()
+	right := NewV4LCamera()
 	go stream.Start()
 	go left.Start("/dev/videol")
 	go right.Start("/dev/videor")
@@ -274,9 +370,10 @@ func main() {
 	}
 
 	go func() {
-		center := NewStreamCamera(1)
-		left := NewV4LCamera(2)
-		right := NewV4LCamera(3)
+		center, centerProcessor, centerActivations := NewStreamCamera(), NewFrameProcessor(1), make(chan Frame, 8)
+		left, leftProcessor, leftActivations := NewV4LCamera(), NewFrameProcessor(2), make(chan Frame, 8)
+		right, rightProcessor, rightActivations := NewV4LCamera(), NewFrameProcessor(3), make(chan Frame, 8)
+
 		go center.Start()
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
@@ -290,36 +387,48 @@ func main() {
 		out := NewNet(4, Window, 3*Outputs, 3)
 		setWindow := func(window int64) {
 			out.SetWindow(window)
-			for net := range center.Nets {
-				center.Nets[net].SetWindow(window)
+			for net := range centerProcessor.Nets {
+				centerProcessor.Nets[net].SetWindow(window)
 			}
-			center.Net.SetWindow(window)
-			for net := range left.Nets {
-				left.Nets[net].SetWindow(window)
+			centerProcessor.Net.SetWindow(window)
+			for net := range leftProcessor.Nets {
+				leftProcessor.Nets[net].SetWindow(window)
 			}
-			left.Net.SetWindow(window)
-			for net := range right.Nets {
-				right.Nets[net].SetWindow(window)
+			leftProcessor.Net.SetWindow(window)
+			for net := range rightProcessor.Nets {
+				rightProcessor.Nets[net].SetWindow(window)
 			}
-			right.Net.SetWindow(window)
+			rightProcessor.Net.SetWindow(window)
 		}
+		go centerProcessor.Process(centerActivations)
+		go leftProcessor.Process(leftActivations)
+		go rightProcessor.Process(rightActivations)
+		go func() {
+			for running {
+				select {
+				case frame := <-center.Images:
+					fmt.Println("center", frame.Frame.Bounds())
+					centerProcessor.Input <- frame
+				case frame := <-left.Images:
+					fmt.Println("left", frame.Frame.Bounds())
+					leftProcessor.Input <- frame
+				case frame := <-right.Images:
+					fmt.Println("right", frame.Frame.Bounds())
+					rightProcessor.Input <- frame
+				}
+			}
+		}()
 		for running {
 			select {
-			case frame := <-center.Images:
-				fmt.Println("center", frame.Frame.Bounds())
-				// 640,480
+			case frame := <-centerActivations:
 				copy(query.Data[:Outputs], frame.Query.Data)
 				copy(key.Data[:Outputs], frame.Key.Data)
 				copy(value.Data[:Outputs], frame.Value.Data)
-			case frame := <-left.Images:
-				fmt.Println("left", frame.Frame.Bounds())
-				// 320,240
+			case frame := <-leftActivations:
 				copy(query.Data[Outputs:2*Outputs], frame.Query.Data)
 				copy(key.Data[Outputs:2*Outputs], frame.Key.Data)
 				copy(value.Data[Outputs:2*Outputs], frame.Value.Data)
-			case frame := <-right.Images:
-				fmt.Println("right", frame.Frame.Bounds())
-				// 320,240
+			case frame := <-rightActivations:
 				copy(query.Data[2*Outputs:3*Outputs], frame.Query.Data)
 				copy(key.Data[2*Outputs:3*Outputs], frame.Key.Data)
 				copy(value.Data[2*Outputs:3*Outputs], frame.Value.Data)
