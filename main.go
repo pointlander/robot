@@ -177,7 +177,7 @@ func (f *FrameProcessor) Process(output chan Frame) {
 				j := coords[n][x].Y + (height/4)*(n/4)
 				y := in.YCbCr[3*j*width+3*i]
 				cb := in.YCbCr[3*j*width+3*i+1]
-				cr := in.YCbCr[3*j*width+3*i+1]
+				cr := in.YCbCr[3*j*width+3*i+2]
 				fy, fcb, fcr := float64(y)/255, float64(cb)/255, float64(cr)/255
 				input.Data = append(input.Data, float32(fy))
 				input.Data = append(input.Data, float32(fcb))
