@@ -6,6 +6,8 @@ option go_package = ".;main";
 message Input {
   uint32 Source = 1;
   repeated uint32 YCbCr = 2;
+  uint32 Width = 3;
+  uint32 Height = 4;
 }
 
 message Output {

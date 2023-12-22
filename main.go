@@ -114,7 +114,7 @@ type FrameProcessor struct {
 	Net    Net
 	Nets   []Net
 	Coords [][]Coord
-	Input  chan Frame
+	Input  chan Input
 }
 
 // NewFrameProcessor creates a new frame processor
@@ -127,7 +127,28 @@ func NewFrameProcessor(seed int64) *FrameProcessor {
 		Seed:  seed,
 		Net:   NewNet(seed, Window, Nets*8, Outputs),
 		Nets:  nets,
-		Input: make(chan Frame, 1),
+		Input: make(chan Input, 1),
+	}
+}
+
+// Convert converts an image into an input
+func Convert(source uint32, img image.Image) Input {
+	b := img.Bounds()
+	width, height := b.Max.X, b.Max.Y
+	pixels := make([]uint32, 0, 3*width*height)
+	for i := 0; i < height; i++ {
+		for j := 0; j < width; j++ {
+			pixel := img.At(i, j)
+			r, g, b, _ := pixel.RGBA()
+			y, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
+			pixels = append(pixels, uint32(y), uint32(cb), uint32(cr))
+		}
+	}
+	return Input{
+		Source: source,
+		YCbCr:  pixels,
+		Width:  uint32(width),
+		Height: uint32(height),
 	}
 }
 
@@ -135,10 +156,8 @@ func NewFrameProcessor(seed int64) *FrameProcessor {
 func (f *FrameProcessor) Process(output chan Frame) {
 	nets, coords, net := &f.Nets, f.Coords, &f.Net
 	query, key, value := []Matrix{}, []Matrix{}, []Matrix{}
-	for frame := range f.Input {
-		img := frame.Frame
-		b := img.Bounds()
-		width, height := b.Max.X, b.Max.Y
+	for in := range f.Input {
+		width, height := int(in.Width), int(in.Height)
 		if coords == nil {
 			rng := rand.New(rand.NewSource(f.Seed))
 			coords = make([][]Coord, len(*nets))
@@ -154,9 +173,11 @@ func (f *FrameProcessor) Process(output chan Frame) {
 		for n := range *nets {
 			input := NewMatrix(0, 3*Pixels, 1)
 			for x := 0; x < Pixels; x++ {
-				pixel := img.At(coords[n][x].X+(width/4)*(n%4), coords[n][x].Y+(height/4)*(n/4))
-				r, g, b, _ := pixel.RGBA()
-				y, cb, cr := color.RGBToYCbCr(uint8(r>>8), uint8(g>>8), uint8(b>>8))
+				i := coords[n][x].X + (width/4)*(n%4)
+				j := coords[n][x].Y + (height/4)*(n/4)
+				y := in.YCbCr[3*j*width+3*i]
+				cb := in.YCbCr[3*j*width+3*i+1]
+				cr := in.YCbCr[3*j*width+3*i+1]
 				fy, fcb, fcr := float64(y)/255, float64(cb)/255, float64(cr)/255
 				input.Data = append(input.Data, float32(fy))
 				input.Data = append(input.Data, float32(fcb))
@@ -195,7 +216,6 @@ func (f *FrameProcessor) Process(output chan Frame) {
 
 		q, k, v := net.Fire(qq, kk, vv)
 		output <- Frame{
-			Frame: img,
 			Query: q,
 			Key:   k,
 			Value: v,
@@ -410,13 +430,13 @@ func main() {
 				select {
 				case frame := <-center.Images:
 					fmt.Println("center", frame.Frame.Bounds())
-					centerProcessor.Input <- frame
+					centerProcessor.Input <- Convert(1, frame.Frame)
 				case frame := <-left.Images:
 					fmt.Println("left", frame.Frame.Bounds())
-					leftProcessor.Input <- frame
+					leftProcessor.Input <- Convert(2, frame.Frame)
 				case frame := <-right.Images:
 					fmt.Println("right", frame.Frame.Bounds())
-					rightProcessor.Input <- frame
+					rightProcessor.Input <- Convert(3, frame.Frame)
 				}
 			}
 		}()
