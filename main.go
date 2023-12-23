@@ -14,6 +14,7 @@ import (
 	"image/color/palette"
 	"image/draw"
 	"image/gif"
+	"math"
 	"math/rand"
 	"os"
 	"time"
@@ -392,6 +393,32 @@ func main() {
 	}
 
 	go func() {
+		rng := rand.New(rand.NewSource(32))
+		actions := make([][]float32, 8)
+		for a := range actions {
+			vector := make([]float32, 32)
+			for i := range vector {
+				vector[i] = rng.Float32()
+			}
+			actions[a] = vector
+		}
+		near := func(a []float32) int {
+			max, index := float32(0.0), 0
+			for j := range actions {
+				b := actions[j]
+				ab, aa, bb := float32(0.0), float32(0.0), float32(0.0)
+				for k := range a {
+					ab += a[k] * b[k]
+					aa += a[k] * a[k]
+					bb += b[k] * b[k]
+				}
+				s := ab / (float32(math.Sqrt(float64(aa))) * float32(math.Sqrt(float64(bb))))
+				if s > max {
+					max, index = s, j
+				}
+			}
+			return index
+		}
 		center, centerProcessor, centerActivations := NewStreamCamera(), NewFrameProcessor(1), make(chan Frame, 8)
 		left, leftProcessor, leftActivations := NewV4LCamera(), NewFrameProcessor(2), make(chan Frame, 8)
 		right, rightProcessor, rightActivations := NewV4LCamera(), NewFrameProcessor(3), make(chan Frame, 8)
@@ -406,7 +433,7 @@ func main() {
 		key.Data = key.Data[:cap(key.Data)]
 		value := NewMatrix(0, 3*Outputs+1, 1)
 		value.Data = value.Data[:cap(value.Data)]
-		out := NewNet(4, Window, 3*Outputs+1, 3*Outputs+3)
+		out := NewNet(4, Window, 3*Outputs+1, 3*Outputs+32)
 		setWindow := func(window int64) {
 			out.SetWindow(window)
 			for net := range centerProcessor.Nets {
@@ -455,10 +482,14 @@ func main() {
 				copy(key.Data[2*Outputs:3*Outputs], frame.Key.Data)
 				copy(value.Data[2*Outputs:3*Outputs], frame.Value.Data)
 			}
+			var votes [8]int
 			query.Data[3*Outputs] = 0
 			key.Data[3*Outputs] = 0
 			value.Data[3*Outputs] = 0
 			q, k, v := out.Fire(query, key, value)
+			votes[near(q.Data[3*Outputs:])]++
+			votes[near(k.Data[3*Outputs:])]++
+			votes[near(v.Data[3*Outputs:])]++
 			query.Data[3*Outputs] = 1
 			copy(query.Data, q.Data[3*Outputs:])
 			key.Data[3*Outputs] = 1
@@ -466,23 +497,19 @@ func main() {
 			value.Data[3*Outputs] = 1
 			copy(value.Data, v.Data[3*Outputs:])
 			q, k, v = out.Fire(query, key, value)
-			vv := NewMatrix(0, 3, 1)
-			for i := 0; i < 3; i++ {
-				vv.Data = append(vv.Data, v.Data[3*Outputs+i])
-			}
-			q = Normalize(q)
-			k = Normalize(k)
-			v = Normalize(v)
-			fmt.Println("...............................................................................")
-			fmt.Println(v.Data[:3])
-			if mode == ModeAuto {
-				c := 0
-				for i, v := range v.Data[:3] {
-					if v > 0 {
-						c |= 1 << i
-					}
+			votes[near(q.Data[3*Outputs:])]++
+			votes[near(k.Data[3*Outputs:])]++
+			votes[near(v.Data[3*Outputs:])]++
+			max, index := 0, 0
+			for k, v := range votes {
+				if v > max {
+					max, index = v, k
 				}
-				switch c {
+			}
+			fmt.Println("...............................................................................")
+			fmt.Println(v.Data[3*Outputs:])
+			if mode == ModeAuto {
+				switch index {
 				case 0:
 					joystickLeft = JoystickStateUp
 					joystickRight = JoystickStateUp
