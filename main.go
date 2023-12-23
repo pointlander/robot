@@ -400,13 +400,13 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		query := NewMatrix(0, 3*Outputs, 1)
+		query := NewMatrix(0, 3*Outputs+1, 1)
 		query.Data = query.Data[:cap(query.Data)]
-		key := NewMatrix(0, 3*Outputs, 1)
+		key := NewMatrix(0, 3*Outputs+1, 1)
 		key.Data = key.Data[:cap(key.Data)]
-		value := NewMatrix(0, 3*Outputs, 1)
+		value := NewMatrix(0, 3*Outputs+1, 1)
 		value.Data = value.Data[:cap(value.Data)]
-		out := NewNet(4, Window, 3*Outputs, 3)
+		out := NewNet(4, Window, 3*Outputs+1, 3*Outputs+3)
 		setWindow := func(window int64) {
 			out.SetWindow(window)
 			for net := range centerProcessor.Nets {
@@ -455,15 +455,29 @@ func main() {
 				copy(key.Data[2*Outputs:3*Outputs], frame.Key.Data)
 				copy(value.Data[2*Outputs:3*Outputs], frame.Value.Data)
 			}
+			query.Data[3*Outputs] = 0
+			key.Data[3*Outputs] = 0
+			value.Data[3*Outputs] = 0
 			q, k, v := out.Fire(query, key, value)
+			query.Data[3*Outputs] = 1
+			copy(query.Data, q.Data[3*Outputs:])
+			key.Data[3*Outputs] = 1
+			copy(key.Data, k.Data[3*Outputs:])
+			value.Data[3*Outputs] = 1
+			copy(value.Data, v.Data[3*Outputs:])
+			q, k, v = out.Fire(query, key, value)
+			vv := NewMatrix(0, 3, 1)
+			for i := 0; i < 3; i++ {
+				vv.Data = append(vv.Data, v.Data[3*Outputs+i])
+			}
 			q = Normalize(q)
 			k = Normalize(k)
 			v = Normalize(v)
 			fmt.Println("...............................................................................")
-			fmt.Println(v.Data)
+			fmt.Println(v.Data[:3])
 			if mode == ModeAuto {
 				c := 0
-				for i, v := range v.Data {
+				for i, v := range v.Data[:3] {
 					if v > 0 {
 						c |= 1 << i
 					}
