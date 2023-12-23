@@ -394,15 +394,31 @@ func main() {
 
 	go func() {
 		rng := rand.New(rand.NewSource(32))
-		actions := make([][]float32, 8)
-		for a := range actions {
+		actionsQ := make([][]float32, 8)
+		for a := range actionsQ {
 			vector := make([]float32, 32)
 			for i := range vector {
 				vector[i] = rng.Float32()
 			}
-			actions[a] = vector
+			actionsQ[a] = vector
 		}
-		near := func(a []float32) int {
+		actionsK := make([][]float32, 8)
+		for a := range actionsK {
+			vector := make([]float32, 32)
+			for i := range vector {
+				vector[i] = rng.Float32()
+			}
+			actionsK[a] = vector
+		}
+		actionsV := make([][]float32, 8)
+		for a := range actionsV {
+			vector := make([]float32, 32)
+			for i := range vector {
+				vector[i] = rng.Float32()
+			}
+			actionsV[a] = vector
+		}
+		near := func(actions [][]float32, a []float32) int {
 			max, index := float32(0.0), 0
 			for j := range actions {
 				b := actions[j]
@@ -487,9 +503,9 @@ func main() {
 			key.Data[3*Outputs] = 0
 			value.Data[3*Outputs] = 0
 			q, k, v := out.Fire(query, key, value)
-			votes[near(q.Data[3*Outputs:])]++
-			votes[near(k.Data[3*Outputs:])]++
-			votes[near(v.Data[3*Outputs:])]++
+			votes[near(actionsQ, q.Data[3*Outputs:])]++
+			votes[near(actionsK, k.Data[3*Outputs:])]++
+			votes[near(actionsV, v.Data[3*Outputs:])]++
 			query.Data[3*Outputs] = 1
 			copy(query.Data, q.Data[3*Outputs:])
 			key.Data[3*Outputs] = 1
@@ -497,13 +513,16 @@ func main() {
 			value.Data[3*Outputs] = 1
 			copy(value.Data, v.Data[3*Outputs:])
 			q, k, v = out.Fire(query, key, value)
-			votes[near(q.Data[3*Outputs:])]++
-			votes[near(k.Data[3*Outputs:])]++
-			votes[near(v.Data[3*Outputs:])]++
-			max, index := 0, 0
+			votes[near(actionsQ, q.Data[3*Outputs:])]++
+			votes[near(actionsK, k.Data[3*Outputs:])]++
+			votes[near(actionsV, v.Data[3*Outputs:])]++
+			sum, index := 0, 0
+			choice := rng.Intn(8)
 			for k, v := range votes {
-				if v > max {
-					max, index = v, k
+				sum += v
+				if sum >= choice {
+					index = k
+					break
 				}
 			}
 			fmt.Println("...............................................................................")
