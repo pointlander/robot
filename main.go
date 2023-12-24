@@ -517,7 +517,7 @@ func main() {
 			votes[near(actionsK, k.Data[3*Outputs:])]++
 			votes[near(actionsV, v.Data[3*Outputs:])]++
 			sum, index := 0, 0
-			choice := rng.Intn(8)
+			choice := rng.Intn(6)
 			for k, v := range votes {
 				sum += v
 				if sum >= choice {
