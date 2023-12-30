@@ -108,29 +108,33 @@ func (n Net) CalculateStatistics(systems []Sample) Set {
 			})
 		}
 	}
+	weights, sum := make([]float32, Window), float32(0)
+	for i := range weights {
+		sum += 1 / systems[i].Entropy
+		weights[i] = 1 / systems[i].Entropy
+	}
+	for i := range weights {
+		weights[i] /= sum
+	}
+
 	for i := range systems[:window] {
 		for j := range systems[i].Neurons {
 			for k, value := range systems[i].Neurons[j].Data {
-				statistics[j][k].Mean += value
+				statistics[j][k].Mean += weights[i] * value
 			}
-		}
-	}
-	for i := range statistics {
-		for j := range statistics[i] {
-			statistics[i][j].Mean /= float32(window)
 		}
 	}
 	for i := range systems[:window] {
 		for j := range systems[i].Neurons {
 			for k, value := range systems[i].Neurons[j].Data {
 				diff := statistics[j][k].Mean - value
-				statistics[j][k].StdDev += diff * diff
+				statistics[j][k].StdDev += weights[i] * diff * diff
 			}
 		}
 	}
 	for i := range statistics {
 		for j := range statistics[i] {
-			statistics[i][j].StdDev /= float32(window)
+			statistics[i][j].StdDev /= (float32(window) - 1) / float32(window)
 			statistics[i][j].StdDev = float32(math.Sqrt(float64(statistics[i][j].StdDev)))
 		}
 	}
@@ -200,26 +204,8 @@ func (n *Net) Fire(query, key, value Matrix) (Matrix, Matrix, Matrix) {
 		return systemsV[i].Entropy < systemsV[j].Entropy
 	})
 
-	nq := n.CalculateStatistics(systemsQ)
-	for i, v := range nq {
-		for j, vv := range v {
-			n.Q[i][j].Mean = (1-Rate)*n.Q[i][j].Mean + Rate*vv.Mean
-			n.Q[i][j].StdDev = (1-Rate)*n.Q[i][j].StdDev + Rate*vv.StdDev
-		}
-	}
-	nk := n.CalculateStatistics(systemsK)
-	for i, v := range nk {
-		for j, vv := range v {
-			n.K[i][j].Mean = (1-Rate)*n.K[i][j].Mean + Rate*vv.Mean
-			n.K[i][j].StdDev = (1-Rate)*n.K[i][j].StdDev + Rate*vv.StdDev
-		}
-	}
-	nv := n.CalculateStatistics(systemsV)
-	for i, v := range nv {
-		for j, vv := range v {
-			n.V[i][j].Mean = (1-Rate)*n.V[i][j].Mean + Rate*vv.Mean
-			n.V[i][j].StdDev = (1-Rate)*n.V[i][j].StdDev + Rate*vv.StdDev
-		}
-	}
+	n.Q = n.CalculateStatistics(systemsQ)
+	n.K = n.CalculateStatistics(systemsK)
+	n.V = n.CalculateStatistics(systemsV)
 	return systemsQ[0].Outputs, systemsK[0].Outputs, systemsV[0].Outputs
 }
