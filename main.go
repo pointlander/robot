@@ -506,7 +506,7 @@ func main() {
 			votes[near(actionsQ, q.Data[3*Outputs:])]++
 			votes[near(actionsK, k.Data[3*Outputs:])]++
 			votes[near(actionsV, v.Data[3*Outputs:])]++
-			query.Data[3*Outputs] = 1
+			/*query.Data[3*Outputs] = 1
 			copy(query.Data, q.Data[3*Outputs:])
 			key.Data[3*Outputs] = 1
 			copy(key.Data, k.Data[3*Outputs:])
@@ -515,9 +515,9 @@ func main() {
 			q, k, v = out.Fire(query, key, value)
 			votes[near(actionsQ, q.Data[3*Outputs:])]++
 			votes[near(actionsK, k.Data[3*Outputs:])]++
-			votes[near(actionsV, v.Data[3*Outputs:])]++
+			votes[near(actionsV, v.Data[3*Outputs:])]++*/
 			sum, index := 0, 0
-			choice := rng.Intn(6)
+			choice := rng.Intn(3)
 			for k, v := range votes {
 				sum += v
 				if sum >= choice {
@@ -547,9 +547,9 @@ func main() {
 				case 5:
 					setWindow(128)
 				case 6:
-					setWindow(64)
-				case 7:
 					setWindow(32)
+				case 7:
+					setWindow(16)
 				}
 				update()
 			}
