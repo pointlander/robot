@@ -110,8 +110,9 @@ func (n Net) CalculateStatistics(systems []Sample) Set {
 	}
 	weights, sum := make([]float32, Window), float32(0)
 	for i := range weights {
-		sum += 1 / systems[i].Entropy
-		weights[i] = 1 / systems[i].Entropy
+		value := float32(math.Exp(-float64(systems[i].Entropy)))
+		sum += value
+		weights[i] = value
 	}
 	for i := range weights {
 		weights[i] /= sum

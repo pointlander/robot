@@ -545,11 +545,11 @@ func main() {
 					joystickLeft = JoystickStateDown
 					joystickRight = JoystickStateDown
 				case 5:
-					setWindow(128)
-				case 6:
 					setWindow(32)
-				case 7:
+				case 6:
 					setWindow(16)
+				case 7:
+					setWindow(8)
 				}
 				update()
 			}
