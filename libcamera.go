@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -58,6 +57,7 @@ func (sc *StreamCamera) Start() {
 	}
 
 	start, count := time.Now(), 0.0
+	_ = start
 	for sc.Stream {
 		var pkt *reisen.Packet
 		pkt, gotPacket, err := media.ReadPacket()
@@ -93,7 +93,7 @@ func (sc *StreamCamera) Start() {
 			}
 			count++
 
-			fmt.Println("center", count/float64(time.Since(start).Seconds()))
+			//fmt.Println("center", count/float64(time.Since(start).Seconds()))
 
 			if skip < 10 {
 				skip++
@@ -107,7 +107,7 @@ func (sc *StreamCamera) Start() {
 				Frame: videoFrame.Image(),
 			}:
 			default:
-				fmt.Println("drop center")
+				//fmt.Println("drop center")
 			}
 		case reisen.StreamAudio:
 			s := media.Streams()[pkt.StreamIndex()].(*reisen.AudioStream)

@@ -10,6 +10,7 @@ require (
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/pointlander/gradient v0.0.0-20230828203002-af1492b01f47
 	github.com/pointlander/occam v0.0.0-20221029020155-a3a656c2c658
+	github.com/pointlander/matrix v0.0.0-20240121211230-305108253736
 	github.com/veandco/go-sdl2 v0.4.35
 	github.com/warthog618/gpiod v0.8.0
 	github.com/zergon321/reisen v0.1.9
@@ -26,7 +27,6 @@ require (
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pointlander/datum/iris v0.0.0-20200802052503-0ee610caba95 // indirect
-	github.com/pointlander/matrix v0.0.0-20231213213732-3f3865683b2e // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	golang.org/x/image v0.11.0 // indirect
 	golang.org/x/sys v0.11.0 // indirect

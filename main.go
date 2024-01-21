@@ -65,8 +65,6 @@ const (
 )
 
 const (
-	// Window is the window size
-	Window = 128
 	// Rate is the learning rate
 	Rate = .3
 	// Outputs is the number of outputs
@@ -122,11 +120,16 @@ type FrameProcessor struct {
 func NewFrameProcessor(seed int64) *FrameProcessor {
 	nets := make([]Net, Nets)
 	for n := range nets {
-		nets[n] = NewNet(seed+1+int64(n), Window, 3*Pixels, 8)
+		nets[n] = NewNet(seed+1+int64(n), 3*Pixels, 8)
+		nets[n].N = 4
+		nets[n].Length = 4 * 4 * 4
 	}
+	net := NewNet(seed, Nets*8, Outputs)
+	net.N = 4
+	net.Length = 4 * 4 * 4
 	return &FrameProcessor{
 		Seed:  seed,
-		Net:   NewNet(seed, Window, Nets*8, Outputs),
+		Net:   net,
 		Nets:  nets,
 		Input: make(chan Input, 1),
 	}
@@ -172,7 +175,7 @@ func (f *FrameProcessor) Process(output chan Frame) {
 			f.Coords = coords
 		}
 		for n := range *nets {
-			input := NewMatrix(0, 3*Pixels, 1)
+			input := NewMatrix(3*Pixels, 1)
 			for x := 0; x < Pixels; x++ {
 				i := coords[n][x].X + (width/4)*(n%4)
 				j := coords[n][x].Y + (height/4)*(n/4)
@@ -185,13 +188,13 @@ func (f *FrameProcessor) Process(output chan Frame) {
 				input.Data = append(input.Data, float32(fcr))
 			}
 			input = Normalize(input)
-			q, k, v := (*nets)[n].Fire(input, input, input)
+			_, q, k, v := (*nets)[n].Fire(input, input, input)
 			query = append(query, q)
 			key = append(key, k)
 			value = append(value, v)
 		}
 
-		qq := NewMatrix(0, Nets*8, 1)
+		qq := NewMatrix(Nets*8, 1)
 		for _, a := range query {
 			for _, b := range a.Data {
 				qq.Data = append(qq.Data, b)
@@ -199,7 +202,7 @@ func (f *FrameProcessor) Process(output chan Frame) {
 		}
 		qq = Normalize(qq)
 
-		kk := NewMatrix(0, Nets*8, 1)
+		kk := NewMatrix(Nets*8, 1)
 		for _, a := range key {
 			for _, b := range a.Data {
 				kk.Data = append(kk.Data, b)
@@ -207,7 +210,7 @@ func (f *FrameProcessor) Process(output chan Frame) {
 		}
 		kk = Normalize(kk)
 
-		vv := NewMatrix(0, Nets*8, 1)
+		vv := NewMatrix(Nets*8, 1)
 		for _, a := range value {
 			for _, b := range a.Data {
 				vv.Data = append(vv.Data, b)
@@ -215,7 +218,7 @@ func (f *FrameProcessor) Process(output chan Frame) {
 		}
 		vv = Normalize(vv)
 
-		q, k, v := net.Fire(qq, kk, vv)
+		_, q, k, v := net.Fire(qq, kk, vv)
 		output <- Frame{
 			Query: q,
 			Key:   k,
@@ -394,7 +397,7 @@ func main() {
 
 	go func() {
 		rng := rand.New(rand.NewSource(32))
-		actionsQ := make([][]float32, 8)
+		actionsQ := make([][]float32, 5)
 		for a := range actionsQ {
 			vector := make([]float32, 32)
 			for i := range vector {
@@ -402,7 +405,7 @@ func main() {
 			}
 			actionsQ[a] = vector
 		}
-		actionsK := make([][]float32, 8)
+		actionsK := make([][]float32, 5)
 		for a := range actionsK {
 			vector := make([]float32, 32)
 			for i := range vector {
@@ -410,7 +413,7 @@ func main() {
 			}
 			actionsK[a] = vector
 		}
-		actionsV := make([][]float32, 8)
+		actionsV := make([][]float32, 5)
 		for a := range actionsV {
 			vector := make([]float32, 32)
 			for i := range vector {
@@ -443,28 +446,15 @@ func main() {
 		go left.Start("/dev/videol")
 		go right.Start("/dev/videor")
 
-		query := NewMatrix(0, 3*Outputs+1, 1)
+		query := NewMatrix(3*Outputs, 1)
 		query.Data = query.Data[:cap(query.Data)]
-		key := NewMatrix(0, 3*Outputs+1, 1)
+		key := NewMatrix(3*Outputs, 1)
 		key.Data = key.Data[:cap(key.Data)]
-		value := NewMatrix(0, 3*Outputs+1, 1)
+		value := NewMatrix(3*Outputs, 1)
 		value.Data = value.Data[:cap(value.Data)]
-		out := NewNet(4, Window, 3*Outputs+1, 3*Outputs+32)
-		setWindow := func(window int64) {
-			out.SetWindow(window)
-			for net := range centerProcessor.Nets {
-				centerProcessor.Nets[net].SetWindow(window)
-			}
-			centerProcessor.Net.SetWindow(window)
-			for net := range leftProcessor.Nets {
-				leftProcessor.Nets[net].SetWindow(window)
-			}
-			leftProcessor.Net.SetWindow(window)
-			for net := range rightProcessor.Nets {
-				rightProcessor.Nets[net].SetWindow(window)
-			}
-			rightProcessor.Net.SetWindow(window)
-		}
+		out := NewNet(4, 3*Outputs, 32)
+		out.N = 4
+		out.Length = 4 * 4 * 4
 		go centerProcessor.Process(centerActivations)
 		go leftProcessor.Process(leftActivations)
 		go rightProcessor.Process(rightActivations)
@@ -498,24 +488,11 @@ func main() {
 				copy(key.Data[2*Outputs:3*Outputs], frame.Key.Data)
 				copy(value.Data[2*Outputs:3*Outputs], frame.Value.Data)
 			}
-			var votes [8]int
-			query.Data[3*Outputs] = 0
-			key.Data[3*Outputs] = 0
-			value.Data[3*Outputs] = 0
-			q, k, v := out.Fire(query, key, value)
-			votes[near(actionsQ, q.Data[3*Outputs:])]++
-			votes[near(actionsK, k.Data[3*Outputs:])]++
-			votes[near(actionsV, v.Data[3*Outputs:])]++
-			/*query.Data[3*Outputs] = 1
-			copy(query.Data, q.Data[3*Outputs:])
-			key.Data[3*Outputs] = 1
-			copy(key.Data, k.Data[3*Outputs:])
-			value.Data[3*Outputs] = 1
-			copy(value.Data, v.Data[3*Outputs:])
-			q, k, v = out.Fire(query, key, value)
-			votes[near(actionsQ, q.Data[3*Outputs:])]++
-			votes[near(actionsK, k.Data[3*Outputs:])]++
-			votes[near(actionsV, v.Data[3*Outputs:])]++*/
+			var votes [5]int
+			_, q, k, v := out.Fire(query, key, value)
+			votes[near(actionsQ, q.Data)]++
+			votes[near(actionsK, k.Data)]++
+			votes[near(actionsV, v.Data)]++
 			sum, index := 0, 0
 			choice := rng.Intn(3)
 			for k, v := range votes {
@@ -526,7 +503,7 @@ func main() {
 				}
 			}
 			fmt.Println("...............................................................................")
-			fmt.Println(v.Data[3*Outputs:])
+			fmt.Println("index=", index)
 			if mode == ModeAuto {
 				switch index {
 				case 0:
@@ -544,12 +521,6 @@ func main() {
 				case 4:
 					joystickLeft = JoystickStateDown
 					joystickRight = JoystickStateDown
-				case 5:
-					setWindow(32)
-				case 6:
-					setWindow(16)
-				case 7:
-					setWindow(8)
 				}
 				update()
 			}

@@ -96,6 +96,7 @@ func (vc *V4LCamera) Start(device string) {
 
 	var cp []byte
 	start, count := time.Now(), 0.0
+	_ = start
 	for vc.Stream {
 		err := camera.WaitForFrame(5)
 
@@ -113,11 +114,11 @@ func (vc *V4LCamera) Start(device string) {
 			fmt.Println(device, err)
 			continue
 		} else {
-			fmt.Println(device)
+			//fmt.Println(device)
 		}
 		count++
 
-		fmt.Println(device, count/float64(time.Since(start).Seconds()))
+		//fmt.Println(device, count/float64(time.Since(start).Seconds()))
 
 		if skip < 20 {
 			skip++
@@ -130,7 +131,7 @@ func (vc *V4LCamera) Start(device string) {
 				cp = make([]byte, len(frame))
 			}
 			copy(cp, frame)
-			fmt.Printf("Frame: %d bytes\n", len(cp))
+			//fmt.Printf("Frame: %d bytes\n", len(cp))
 			yuyv := image.NewYCbCr(image.Rect(0, 0, int(w), int(h)), image.YCbCrSubsampleRatio422)
 			for i := range yuyv.Cb {
 				ii := i * 4
@@ -146,7 +147,7 @@ func (vc *V4LCamera) Start(device string) {
 				Frame: yuyv,
 			}:
 			default:
-				fmt.Println("drop", device)
+				//fmt.Println("drop", device)
 			}
 		}
 	}
