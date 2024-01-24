@@ -9,8 +9,8 @@ require (
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/pointlander/gradient v0.0.0-20230828203002-af1492b01f47
+	github.com/pointlander/matrix v0.0.0-20240124021357-7df5119d4224
 	github.com/pointlander/occam v0.0.0-20221029020155-a3a656c2c658
-	github.com/pointlander/matrix v0.0.0-20240121211230-305108253736
 	github.com/veandco/go-sdl2 v0.4.35
 	github.com/warthog618/gpiod v0.8.0
 	github.com/zergon321/reisen v0.1.9
